@@ -66,6 +66,29 @@ no fuzzy matching without an explicit `studio_aliases` table.
 **Performers are never inferred.** Unknown links stay NULL and the scene
 reports `partial`/`orphan` in the mapping audit.
 
+### Filename credits (scanner, 2026-10-02)
+
+Descriptive filenames carry credits the scanner parses when creating scenes
+for not-yet-in-DB files (existing rows are only stat-updated, never re-parsed):
+
+```text
+root:   "<Studio> - <P1> - ... - <Title>  DD.MM.YYYY_RES"
+folder: "<P1> - ... - <Title>  DD.MM.YYYY_RES"   (studio from folder)
+short:  "<Title> - P1, P2"                        (comma list, never a studio)
+```
+
+- **Studio**: exact match → punctuation-insensitive slug match
+  ("Mommy's Girl" → `mommys-girl`) → create new studio row. Never mis-linked.
+- **Performers**: linked ONLY on exact (case-insensitive) match to an
+  existing performer row. Unknown name-like tokens stay **display-only** in
+  `scenes.performers` (never identity, §2.2) and are reported in the scan
+  result (`unknown_performers`) for human creation + PATCH linking.
+- **Title-dash fragments** ("Lesbian Encounters - Scene 1"): digit/`#`/`!`/`?`
+  or >3-word segments fold back into the title; the rest stay display-only.
+- **Categories**: inherited from the studio's signature categories (union,
+  additive). Filenames carry no categories; set a new studio's signature via
+  `PATCH /api/studios/{id}` and it propagates.
+
 ## 4. Audit as regression detector
 
 `GET /api/library/mapping-audit` (read-only, exact-match only) reports

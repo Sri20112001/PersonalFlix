@@ -1,7 +1,7 @@
 use crate::api::{now_iso, resolve_video_path};
 use crate::db::{meta_set, Db};
 use crate::state::AppState;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -23,6 +23,13 @@ pub struct ScanResult {
     pub conflicts: usize,
     /// Files with no usable prefix (legacy AUTOINCREMENT placeholder).
     pub unresolved: usize,
+    /// Performer links established from filename credits (exact matches).
+    pub performer_links: usize,
+    /// Studios created from filename/folder names during this scan.
+    pub new_studios: Vec<String>,
+    /// Performer-looking filename tokens with no matching performer row
+    /// (stored display-only; create the performer + re-scan or PATCH to link).
+    pub unknown_performers: Vec<String>,
     pub conflict_files: Vec<String>,
     pub bytes: u64,
     pub duration_ms: u64,
@@ -58,19 +65,20 @@ pub fn scan_library(db: &Db, library_path: &Path) -> ScanResult {
     let mut stmt_ins = conn
         .prepare(
             "INSERT INTO scenes(file_name, original_name, title, file_path, resolution,
-                                studio, studio_id, date, category_ids,
+                                studio, studio_id, date, performers, performer_ids, category_ids,
                                 file_exists, size_bytes, mtime)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?11)",
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12, ?13)",
         )
         .expect("prepare insert");
     let mut stmt_ins_id = conn
         .prepare(
             "INSERT INTO scenes(id, file_name, original_name, title, file_path, resolution,
-                                studio, studio_id, date, category_ids,
+                                studio, studio_id, date, performers, performer_ids, category_ids,
                                 file_exists, size_bytes, mtime)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11, ?12)",
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1, ?13, ?14)",
         )
         .expect("prepare insert with id");
+    let mut unknown_set: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for f in &files {
         res.files += 1;
@@ -124,55 +132,62 @@ pub fn scan_library(db: &Db, library_path: &Path) -> ScanResult {
                                 res.adopted += 1;
                             }
                             // No scene with this id: create USING the prefix.
-                            // Descriptive names also carry studio/date/title — parse them.
+                            // Filename credits (studio/performers/title/date) are parsed here.
                             None => {
-                                let (title, date, res_parsed) = parse_descriptive(&f.stem);
-                                let resolution = if res_parsed.is_empty() {
+                                let meta = build_new_meta(&conn, f);
+                                let resolution = if meta.resolution.is_empty() {
                                     detect_resolution(&f.name)
                                 } else {
-                                    res_parsed
+                                    meta.resolution
                                 };
-                                let (studio, studio_id) =
-                                    match lookup_studio(&conn, &f.parent) {
-                                        Some((id, name)) => (name, id),
-                                        None if f.parent.is_empty() => {
-                                            (String::new(), String::new())
-                                        }
-                                        None => (f.parent.clone(), String::new()),
-                                    };
-                                let cats = crate::api::studios::studio_signature(&conn, &studio_id);
                                 stmt_ins_id
                                     .execute(rusqlite::params![
                                         pid,
                                         f.name,
                                         f.stem,
-                                        title,
+                                        meta.title,
                                         f.stored,
                                         resolution,
-                                        studio,
-                                        studio_id,
-                                        date,
-                                        serde_json::to_string(&cats).unwrap_or_else(|_| "[]".into()),
+                                        meta.studio,
+                                        meta.studio_id,
+                                        meta.date,
+                                        meta.performers_json,
+                                        meta.performer_ids_json,
+                                        meta.category_ids_json,
                                         f.size,
                                         f.mtime,
                                     ])
                                     .ok();
+                                res.performer_links += meta.link_count;
+                                if let Some(s) = meta.studio_created {
+                                    if !res.new_studios.contains(&s) {
+                                        res.new_studios.push(s);
+                                    }
+                                }
+                                for u in meta.unknown_names {
+                                    unknown_set.insert(u);
+                                }
                                 claimed.insert(p);
                                 res.new += 1;
                                 res.created += 1;
                             }
                         }
                     } else {
-                        legacy_placeholder(&mut stmt_ins, &conn, f, &mut res);
+                        legacy_placeholder(&mut stmt_ins, &conn, f, &mut res, &mut unknown_set);
                     }
                 } else {
-                    legacy_placeholder(&mut stmt_ins, &conn, f, &mut res);
+                    legacy_placeholder(&mut stmt_ins, &conn, f, &mut res, &mut unknown_set);
                 }
             }
         }
     }
 
     res.missing = mark_missing(&conn, library_path, &seen);
+
+    let mut unknowns: Vec<String> = unknown_set.into_iter().collect();
+    unknowns.sort();
+    unknowns.truncate(50);
+    res.unknown_performers = unknowns;
 
     drop(stmt_upd);
     drop(stmt_ins);
@@ -200,37 +215,43 @@ fn legacy_placeholder(
     conn: &Connection,
     f: &VideoFile,
     res: &mut ScanResult,
+    unknown_set: &mut std::collections::HashSet<String>,
 ) {
-    // Descriptive filenames (studio-grouped) carry their own metadata.
-    // Studio ONLY on exact match; performers never inferred (§3).
-    let (title, date, res_parsed) = parse_descriptive(&f.stem);
-    let resolution = if res_parsed.is_empty() {
+    // Descriptive filenames carry their own credits (studio/performers/title).
+    // Performers link ONLY on exact match to an existing performer row;
+    // unknown names stay display-only and are reported for review.
+    let meta = build_new_meta(conn, f);
+    let resolution = if meta.resolution.is_empty() {
         detect_resolution(&f.name)
     } else {
-        res_parsed
+        meta.resolution
     };
-    let (studio, studio_id) = match lookup_studio(conn, &f.parent) {
-        Some((id, name)) => (name, id),
-        None if f.parent.is_empty() => (String::new(), String::new()),
-        None => (f.parent.clone(), String::new()),
-    };
-    // New scenes inherit their studio's signature categories automatically.
-    let cats = crate::api::studios::studio_signature(conn, &studio_id);
     stmt_ins
         .execute(rusqlite::params![
             f.name,
             f.stem,
-            title,
+            meta.title,
             f.stored,
             resolution,
-            studio,
-            studio_id,
-            date,
-            serde_json::to_string(&cats).unwrap_or_else(|_| "[]".into()),
+            meta.studio,
+            meta.studio_id,
+            meta.date,
+            meta.performers_json,
+            meta.performer_ids_json,
+            meta.category_ids_json,
             f.size,
             f.mtime,
         ])
         .ok();
+    res.performer_links += meta.link_count;
+    if let Some(s) = meta.studio_created {
+        if !res.new_studios.contains(&s) {
+            res.new_studios.push(s);
+        }
+    }
+    for u in meta.unknown_names {
+        unknown_set.insert(u);
+    }
     res.new += 1;
     res.unresolved += 1;
 }
@@ -485,6 +506,278 @@ fn lookup_studio(conn: &Connection, parent: &str) -> Option<(String, String)> {
         |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
     )
     .ok()
+}
+
+/// Canonical slug for studio ids: lowercase, apostrophes dropped,
+/// runs of non-alphanumerics collapsed to one `-`.
+/// "Mommy's Girl" → "mommys-girl", "Babes.com" → "babes-com".
+fn slugify_id(name: &str) -> String {
+    let lower = name.to_lowercase().replace('\'', "").replace('’', "");
+    let mut out = String::new();
+    let mut dashed = false;
+    for c in lower.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+            dashed = false;
+        } else if !out.is_empty() && !dashed {
+            out.push('-');
+            dashed = true;
+        }
+    }
+    while out.ends_with('-') {
+        out.pop();
+    }
+    out
+}
+
+/// Resolve a studio candidate (filename head or folder name) to
+/// (display_name, studio_id):
+/// exact match → punctuation-insensitive slug match → create new row.
+/// Creating (never mis-linking) keeps `studio_missing` orphans from
+/// accumulating when new studios arrive with new files.
+fn resolve_studio(conn: &Connection, candidate: &str) -> (String, String, Option<String>) {
+    let cand = candidate.trim();
+    if cand.is_empty() {
+        return (String::new(), String::new(), None);
+    }
+    if let Some((id, name)) = lookup_studio(conn, cand) {
+        return (name, id, None);
+    }
+    let want = slugify_id(cand);
+    if want.is_empty() {
+        return (cand.to_string(), String::new(), None);
+    }
+    if let Ok(mut stmt) = conn.prepare("SELECT id, name FROM studios") {
+        if let Ok(rows) =
+            stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)))
+        {
+            for row in rows.flatten() {
+                let name_slug = row.1.as_deref().map(slugify_id).unwrap_or_default();
+                if slugify_id(&row.0) == want || name_slug == want {
+                    return (row.1.unwrap_or(row.0.clone()), row.0, None);
+                }
+            }
+        }
+    }
+    let mut id = want;
+    let mut n = 2;
+    while conn
+        .query_row("SELECT 1 FROM studios WHERE id=?1", params![id], |_| Ok(()))
+        .is_ok()
+    {
+        id = format!("{}-{n}", slugify_id(cand));
+        n += 1;
+    }
+    let name = cand.to_string();
+    match conn.execute(
+        "INSERT OR IGNORE INTO studios(id, name) VALUES(?1, ?2)",
+        params![id, name],
+    ) {
+        Ok(_) => (name.clone(), id.clone(), Some(name)),
+        Err(_) => (name, String::new(), None),
+    }
+}
+
+/// Exact (case-insensitive) performer lookup by display name or id.
+/// Returns (canonical_id, canonical_name). Unknown names are NEVER
+/// auto-created here — callers keep them display-only (MAPPING_INVARIANTS §2.2).
+fn lookup_performer(conn: &Connection, name: &str) -> Option<(String, String)> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    conn.query_row(
+        "SELECT id, name FROM performers WHERE lower(name)=lower(?1) OR lower(id)=lower(?1) LIMIT 1",
+        [name],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+    )
+    .ok()
+    .map(|(id, n)| (id.clone(), n.unwrap_or(id)))
+}
+
+/// True when a filename segment trails a date like "  25.04.2022_480m".
+fn has_date_tail(segment: &str) -> bool {
+    let Some((_, tail)) = segment.rsplit_once("  ") else {
+        return false;
+    };
+    let date = tail.split('_').next().unwrap_or("");
+    let p: Vec<&str> = date.split('.').collect();
+    p.len() == 3
+        && p[0].len() == 2
+        && p[1].len() == 2
+        && p[2].len() == 4
+        && p.iter().all(|x| x.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// Split a video stem into (studio_candidate, performer_candidates, title_blob).
+/// - Root files (`parent == ""`): "<Studio> - <P1> - ... - <Title>  date_res".
+/// - Folder files: studio comes from the folder; "<P1> - ... - <Title>  date_res".
+/// - Short form (either): "<Title> - P1, P2" — comma list, never a studio.
+/// Titles containing " - " surface their extra segments as performer
+/// candidates; the caller folds title-like ones back into the title.
+/// Two-part root names ("A - B") are disambiguated against the DB: known
+/// studio → studio; known performer head → credits; dated B → studio-first
+/// convention; otherwise the whole stem stays the title (no bogus studio).
+fn split_filename_credits(
+    conn: &Connection,
+    stem: &str,
+    parent: &str,
+) -> (Option<String>, Vec<String>, String) {
+    let stem = stem.trim();
+    if !stem.contains(" - ") {
+        return (None, vec![], stem.to_string());
+    }
+    let parts: Vec<String> = stem
+        .split(" - ")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.len() < 2 {
+        return (None, vec![], stem.to_string());
+    }
+    let last = parts.last().cloned().unwrap_or_default();
+    // Short form: trailing comma list with no date ("Title - P1, P2").
+    if last.contains(',') && !has_date_tail(&last) {
+        let title = parts[..parts.len() - 1].join(" - ");
+        let perfs = last
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        return (None, perfs, title);
+    }
+    if parent.is_empty() {
+        if parts.len() >= 3 {
+            let perfs = parts[1..parts.len() - 1].to_vec();
+            return (Some(parts[0].clone()), perfs, last);
+        }
+        let head = parts[0].clone();
+        if studio_known(conn, &head) {
+            return (Some(head), vec![], last);
+        }
+        if lookup_performer(conn, &head).is_some() {
+            return (None, vec![head], last);
+        }
+        if has_date_tail(&last) {
+            return (Some(head), vec![], last);
+        }
+        return (None, vec![], stem.to_string());
+    }
+    let perfs = parts[..parts.len() - 1].to_vec();
+    (None, perfs, last)
+}
+
+/// True when the candidate names an existing studio (exact or
+/// punctuation-insensitive slug match). No writes.
+fn studio_known(conn: &Connection, candidate: &str) -> bool {
+    if lookup_studio(conn, candidate).is_some() {
+        return true;
+    }
+    let want = slugify_id(candidate);
+    if want.is_empty() {
+        return false;
+    }
+    conn.prepare("SELECT id, name FROM studios")
+        .map(|mut stmt| {
+            stmt.query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            })
+            .map(|rows| {
+                rows.flatten().any(|(id, name)| {
+                    slugify_id(&id) == want
+                        || name.as_deref().map(slugify_id).unwrap_or_default() == want
+                })
+            })
+            .unwrap_or(false)
+        })
+        .unwrap_or(false)
+}
+
+/// Title fragments that leaked into the performer position (titles containing
+/// " - ", e.g. "Lesbian Encounters - Scene 1"): digits, `#`/`!`/`?`, or more
+/// than 3 words mark a title. Everything else is performer-shaped.
+fn looks_like_title(token: &str) -> bool {
+    if token
+        .chars()
+        .any(|c| c.is_ascii_digit() || c == '#' || c == '!' || c == '?')
+    {
+        return true;
+    }
+    token.split_whitespace().count() > 3
+}
+
+struct NewMeta {
+    title: String,
+    date: String,
+    resolution: String,
+    studio: String,
+    studio_id: String,
+    studio_created: Option<String>,
+    performers_json: String,
+    performer_ids_json: String,
+    category_ids_json: String,
+    link_count: usize,
+    unknown_names: Vec<String>,
+}
+
+/// Build the full metadata for a not-yet-in-DB file: title/date/resolution
+/// from the trailing blob, studio from filename head or folder (created when
+/// new), performers linked on exact match (unknowns kept display-only), and
+/// categories inherited from the studio signature.
+fn build_new_meta(conn: &Connection, f: &VideoFile) -> NewMeta {
+    let (studio_cand, perf_cands, title_blob) = split_filename_credits(conn, &f.stem, &f.parent);
+    let (mut title, date, resolution) = parse_descriptive(&title_blob);
+    let mut title_extra: Vec<String> = Vec::new();
+    let mut name_cands: Vec<String> = Vec::new();
+    for c in &perf_cands {
+        for nm in c.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            if looks_like_title(nm) {
+                title_extra.push(nm.to_string());
+            } else {
+                name_cands.push(nm.to_string());
+            }
+        }
+    }
+    if !title_extra.is_empty() {
+        title_extra.push(title);
+        title = title_extra.join(" - ");
+    }
+    let folder_cand = if f.parent.is_empty() { None } else { Some(f.parent.clone()) };
+    let (studio, studio_id, studio_created) = match studio_cand.or(folder_cand) {
+        Some(c) => resolve_studio(conn, &c),
+        None => (String::new(), String::new(), None),
+    };
+    let mut display: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
+    let mut unknown: Vec<String> = Vec::new();
+    for nm in &name_cands {
+        match lookup_performer(conn, nm) {
+            Some((id, canon)) => {
+                ids.push(id);
+                display.push(canon);
+            }
+            None => {
+                display.push(nm.clone());
+                unknown.push(nm.clone());
+            }
+        }
+    }
+    let link_count = ids.len();
+    // New scenes inherit their studio's signature categories automatically.
+    let cats = crate::api::studios::studio_signature(conn, &studio_id);
+    NewMeta {
+        title,
+        date,
+        resolution,
+        studio,
+        studio_id,
+        studio_created,
+        performers_json: serde_json::to_string(&display).unwrap_or_else(|_| "[]".into()),
+        performer_ids_json: serde_json::to_string(&ids).unwrap_or_else(|_| "[]".into()),
+        category_ids_json: serde_json::to_string(&cats).unwrap_or_else(|_| "[]".into()),
+        link_count,
+        unknown_names: unknown,
+    }
 }
 
 /// Compute library health stats without rescanning.
@@ -1284,6 +1577,205 @@ mod tests {
             .flatten()
             .collect();
         assert_eq!(ids, vec![1266572]);
+        std::fs::remove_dir_all(&lib).ok();
+    }
+
+    #[test]
+    fn slugify_id_cases() {
+        assert_eq!(slugify_id("Mommy's Girl"), "mommys-girl");
+        assert_eq!(slugify_id("Babes.com"), "babes-com");
+        assert_eq!(slugify_id("BLACKED RAW"), "blacked-raw");
+        assert_eq!(slugify_id("Devil's Film"), "devils-film");
+        assert_eq!(slugify_id(""), "");
+    }
+
+    /// Filename credit splitting across the observed filename shapes.
+    #[test]
+    fn split_filename_credits_forms() {
+        let db = crate::seed::open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute("INSERT INTO studios(id,name) VALUES('mommys-girl','Mommys Girl')", []).unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('jane-wilde','Jane Wilde')", []).unwrap();
+        }
+        let conn = db.lock().unwrap();
+        // Root long form: studio + performers + dated title.
+        let (s, p, t) = split_filename_credits(
+            &conn,
+            "Mommy's Girl - Alexis Fawx - Jane Wilde - Still Desirable  02.02.2019_480m",
+            "",
+        );
+        assert_eq!(s, Some("Mommy's Girl".to_string()));
+        assert_eq!(p, vec!["Alexis Fawx".to_string(), "Jane Wilde".to_string()]);
+        assert_eq!(t, "Still Desirable  02.02.2019_480m");
+        // Folder long form: no studio, performers + title.
+        let (s, p, t) = split_filename_credits(
+            &conn,
+            "Marica Hase - Alexis Tae - Intimate Worship  25.04.2022_480m",
+            "All Girl Massage",
+        );
+        assert_eq!(s, None);
+        assert_eq!(p, vec!["Marica Hase".to_string(), "Alexis Tae".to_string()]);
+        assert_eq!(t, "Intimate Worship  25.04.2022_480m");
+        // Short form: comma list, title preserved whole.
+        let (s, p, t) = split_filename_credits(
+            &conn,
+            "Before I Marry Him - Ana Foxxx, Eliza Ibarra",
+            "Babes.com",
+        );
+        assert_eq!(s, None);
+        assert_eq!(p, vec!["Ana Foxxx".to_string(), "Eliza Ibarra".to_string()]);
+        assert_eq!(t, "Before I Marry Him");
+        // Two-part root: known studio (punctuation-insensitive) → studio.
+        let (s, p, t) = split_filename_credits(&conn, "Mommys Girl - Some Title  02.02.2019_480m", "");
+        assert_eq!(s, Some("Mommys Girl".to_string()));
+        assert!(p.is_empty());
+        // Two-part root: performer head → credits, no studio.
+        let (s, p, t) = split_filename_credits(&conn, "Jane Wilde - Some Title  02.02.2019_480m", "");
+        assert_eq!(s, None);
+        assert_eq!(p, vec!["Jane Wilde".to_string()]);
+        assert_eq!(t, "Some Title  02.02.2019_480m");
+        // Two-part root, unknown head, undated → whole stem stays title.
+        let (s, p, t) = split_filename_credits(&conn, "Some Title - Subtitle", "");
+        assert_eq!(s, None);
+        assert!(p.is_empty());
+        assert_eq!(t, "Some Title - Subtitle");
+        // Numeric stems unaffected.
+        let (s, p, t) = split_filename_credits(&conn, "1266572_480m", "");
+        assert_eq!(s, None);
+        assert!(p.is_empty());
+        assert_eq!(t, "1266572_480m");
+    }
+
+    /// End-to-end credit build: apostrophe studio slug-matches, known
+    /// performer links, unknown stays display-only, title-dash fragment folds
+    /// back, categories inherit the studio signature.
+    #[test]
+    fn build_new_meta_links_credits() {
+        let db = crate::seed::open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute("INSERT INTO studios(id,name) VALUES('mommys-girl','Mommys Girl')", []).unwrap();
+            conn.execute("INSERT INTO categories(id,name) VALUES('lesbian','Lesbian')", []).unwrap();
+            conn.execute(
+                "UPDATE studios SET signature_categories='[\"lesbian\"]' WHERE id='mommys-girl'",
+                [],
+            )
+            .unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('alexis-fawx','Alexis Fawx')", []).unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('jane-wilde','Jane Wilde')", []).unwrap();
+        }
+        let conn = db.lock().unwrap();
+        let f = VideoFile {
+            name: "Mommy's Girl - Alexis Fawx - New Star - Still Desirable  02.02.2019_480m.mp4".into(),
+            stem: "Mommy's Girl - Alexis Fawx - New Star - Still Desirable  02.02.2019_480m".into(),
+            rel: "x.mp4".into(),
+            stored: "Porn/x.mp4".into(),
+            parent: "".into(),
+            size: 1,
+            mtime: 0.0,
+        };
+        let meta = build_new_meta(&conn, &f);
+        assert_eq!(meta.studio_id, "mommys-girl");
+        assert_eq!(meta.studio, "Mommys Girl");
+        assert!(meta.studio_created.is_none());
+        assert_eq!(meta.title, "Still Desirable");
+        assert_eq!(meta.date, "2019-02-02");
+        assert_eq!(meta.performer_ids_json, "[\"alexis-fawx\"]");
+        // Unknown "New Star" kept display-only alongside the linked name.
+        assert!(meta.performers_json.contains("Alexis Fawx"));
+        assert!(meta.performers_json.contains("New Star"));
+        assert_eq!(meta.unknown_names, vec!["New Star".to_string()]);
+        assert_eq!(meta.link_count, 1);
+        assert_eq!(meta.category_ids_json, "[\"lesbian\"]");
+    }
+
+    /// Ambiguous middle segments ("Lesbian Encounters" in a title with a
+    /// dash) stay display-only instead of becoming bogus performers or
+    /// polluting the title — the human fixes it via the review queue.
+    /// Digit/`#` fragments ("Women Loving Girls #3") DO fold back.
+    #[test]
+    fn build_new_meta_folds_title_dashes() {
+        let db = crate::seed::open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('abella-danger','Abella Danger')", []).unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('jane-wilde','Jane Wilde')", []).unwrap();
+        }
+        let conn = db.lock().unwrap();
+        let f = VideoFile {
+            name: "Devil's Film - Abella Danger - Jane Wilde - Lesbian Encounters - Scene 1  14.03.2019_480m.mp4".into(),
+            stem: "Devil's Film - Abella Danger - Jane Wilde - Lesbian Encounters - Scene 1  14.03.2019_480m".into(),
+            rel: "x.mp4".into(),
+            stored: "Porn/x.mp4".into(),
+            parent: "".into(),
+            size: 1,
+            mtime: 0.0,
+        };
+        let meta = build_new_meta(&conn, &f);
+        // Unknown studio is created, not left dangling.
+        assert_eq!(meta.studio_id, "devils-film");
+        assert_eq!(meta.studio, "Devil's Film");
+        assert_eq!(meta.studio_created, Some("Devil's Film".to_string()));
+        assert_eq!(meta.title, "Scene 1");
+        assert_eq!(meta.performer_ids_json, "[\"abella-danger\",\"jane-wilde\"]");
+        // Ambiguous fragment stays display-only (never identity), flagged for review.
+        assert!(meta.performers_json.contains("Lesbian Encounters"));
+        assert_eq!(meta.unknown_names, vec!["Lesbian Encounters".to_string()]);
+    }
+
+    /// Digit/`#` fragments fold back into the title.
+    #[test]
+    fn build_new_meta_folds_hash_fragments() {
+        let db = crate::seed::open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('jane-wilde','Jane Wilde')", []).unwrap();
+        }
+        let conn = db.lock().unwrap();
+        let f = VideoFile {
+            name: "X-Studio - Jane Wilde - Women Loving Girls #3 - Real Title  01.02.2020_480m.mp4".into(),
+            stem: "X-Studio - Jane Wilde - Women Loving Girls #3 - Real Title  01.02.2020_480m".into(),
+            rel: "x.mp4".into(),
+            stored: "Porn/x.mp4".into(),
+            parent: "".into(),
+            size: 1,
+            mtime: 0.0,
+        };
+        let meta = build_new_meta(&conn, &f);
+        assert_eq!(meta.title, "Women Loving Girls #3 - Real Title");
+        assert_eq!(meta.performer_ids_json, "[\"jane-wilde\"]");
+        assert!(!meta.performers_json.contains("Women Loving"));
+    }
+
+    /// Full scan of a root descriptive file creates the scene with credits.
+    #[test]
+    fn scanner_creates_scene_with_filename_credits() {
+        let db = crate::seed::open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute("INSERT INTO studios(id,name) VALUES('brazzers','Brazzers')", []).unwrap();
+            conn.execute("INSERT INTO performers(id,name) VALUES('keiran-lee','Keiran Lee')", []).unwrap();
+        }
+        let lib = test_library(&[
+            "Brazzers - Keiran Lee - Giselle Palmer - Slow And Sexy  04.10.2018_480m.mp4",
+        ]);
+        let res = scan_library(&db, &lib);
+        assert_eq!(res.new, 1);
+        assert_eq!(res.performer_links, 1);
+        assert!(res.unknown_performers.contains(&"Giselle Palmer".to_string()));
+        let conn = db.lock().unwrap();
+        let (studio_id, pids, disp, title): (String, String, String, String) = conn
+            .query_row(
+                "SELECT studio_id, performer_ids, performers, title FROM scenes LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(studio_id, "brazzers");
+        assert_eq!(pids, "[\"keiran-lee\"]");
+        assert!(disp.contains("Keiran Lee") && disp.contains("Giselle Palmer"));
+        assert_eq!(title, "Slow And Sexy");
         std::fs::remove_dir_all(&lib).ok();
     }
 }
