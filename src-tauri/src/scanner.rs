@@ -1627,7 +1627,7 @@ mod tests {
         assert_eq!(p, vec!["Ana Foxxx".to_string(), "Eliza Ibarra".to_string()]);
         assert_eq!(t, "Before I Marry Him");
         // Two-part root: known studio (punctuation-insensitive) → studio.
-        let (s, p, t) = split_filename_credits(&conn, "Mommys Girl - Some Title  02.02.2019_480m", "");
+        let (s, p, _t) = split_filename_credits(&conn, "Mommys Girl - Some Title  02.02.2019_480m", "");
         assert_eq!(s, Some("Mommys Girl".to_string()));
         assert!(p.is_empty());
         // Two-part root: performer head → credits, no studio.

@@ -17,7 +17,7 @@ pub fn routes() -> Router<AppState> {
         .route("/{id}", get(one).patch(update).delete(remove))
 }
 
-pub const SCENE_COLS: &str = "id, file_name, original_name, resolution, studio, studio_id, title, performers, performer_ids, date, network, source_url, file_path, category_ids, related_ids, file_exists, size_bytes, mtime, tags, description";
+pub const SCENE_COLS: &str = "id, file_name, original_name, resolution, studio, studio_id, title, performers, performer_ids, date, network, source_url, file_path, category_ids, related_ids, file_exists, size_bytes, mtime, tags, description, media_status, duration, video_codec, audio_codec, width, height";
 
 /// Link-resolution failure: the caller supplied an id with no canonical row.
 /// Handlers map this to 400 — relationships are never stored unvalidated
@@ -77,6 +77,12 @@ pub fn scene_from_row(row: &rusqlite::Row) -> rusqlite::Result<JValue> {
         "mtime": row.get::<_, Option<f64>>(17)?.unwrap_or(0.0),
         "tags": jcol(row.get::<_, Option<String>>(18)?),
         "description": row.get::<_, Option<String>>(19)?.unwrap_or_default(),
+        "media_status": row.get::<_, Option<String>>(20)?.unwrap_or_else(|| "ok".into()),
+        "duration": row.get::<_, Option<f64>>(21)?,
+        "video_codec": row.get::<_, Option<String>>(22)?,
+        "audio_codec": row.get::<_, Option<String>>(23)?,
+        "width": row.get::<_, Option<i64>>(24)?,
+        "height": row.get::<_, Option<i64>>(25)?,
     }))
 }
 

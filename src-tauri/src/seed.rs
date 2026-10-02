@@ -1,5 +1,4 @@
 use crate::db::Db;
-use rusqlite::Connection;
 use serde_json::Value;
 use std::path::Path;
 
@@ -181,12 +180,21 @@ fn insert_scene(tx: &rusqlite::Transaction, v: &Value) -> bool {
     res.is_ok()
 }
 
-/// Used by handlers/tests that need a fresh in-memory DB with schema.
+/// Test/helper database: a temp-file DB opened through the real `db::open`
+/// path (tables + versioned migrations + indexes), so tests exercise the
+/// same schema production uses.
 #[allow(dead_code)]
 pub fn open_memory() -> Db {
-    let conn = Connection::open_in_memory().unwrap();
-    conn.execute_batch(crate::db::SCHEMA).unwrap();
-    std::sync::Arc::new(std::sync::Mutex::new(conn))
+    let dir = std::env::temp_dir().join(format!(
+        "pfx-mem-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    crate::db::open(&dir.join("app.db")).unwrap()
 }
 
 #[cfg(test)]
