@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PersonalFlix Player with SceneInfoPanel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Anton&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            headline: ['Anton', 'sans-serif'],
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            amber: {
+              DEFAULT: '#F5B301',
+              hover: '#FFC52F',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      background-color: #0A0A0B;
+      color: #FFFFFF;
+      overflow: hidden;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex bg-[#0A0A0B] text-zinc-300 font-sans antialiased overflow-hidden select-none">
+
+<!-- =========================================================================
+       SCENE INFO PANEL (RIGHT-SIDE INSPECTOR RAIL)
+       420px width, full viewport height, overflow-y-auto, internal scrolling
+       ========================================================================= -->
+<aside class="w-[420px] max-w-[45%] min-w-[360px] h-full bg-[#0A0A0B] text-zinc-300 border-l border-white/5 flex flex-col z-30 shadow-2xl"><!-- STICKY HEADER (h-11, Pro Keyboard First) -->
+<header class="h-11 px-3 bg-[#0A0A0B]/95 backdrop-blur-md border-b border-white/5 flex items-center justify-between shrink-0 z-30">
+<div class="flex items-center gap-1.5 min-w-0">
+<button class="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-zinc-300 hover:text-white hover:bg-white/5 rounded-lg transition-all group" title="Back to library (Esc)">
+<svg class="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5 text-zinc-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="uppercase tracking-wider text-[11px] font-mono font-bold">Back</span>
+<kbd class="px-1.5 py-0.2 text-[9px] font-mono bg-white/10 text-zinc-300 rounded border border-white/10">Esc</kbd>
+</button>
+<span class="h-3.5 w-px bg-white/10"></span>
+<button class="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-zinc-300 hover:text-[#F5B301] hover:bg-[#F5B301]/10 rounded-lg transition-all" title="Open full scene page (Tab ↗)">
+<span class="uppercase tracking-wider text-[11px] font-mono font-bold">Details</span>
+<svg class="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<kbd class="px-1 py-0.2 text-[9px] font-mono bg-white/5 text-zinc-400 rounded border border-white/10 ml-0.5">Tab ↗</kbd>
+</button>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[10px] font-mono text-zinc-500 hidden sm:inline-block mr-1">Inspector</span>
+<button class="flex items-center gap-1 p-1 px-1.5 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all" title="Close Inspector Panel (I)">
+<kbd class="px-1 py-0.2 text-[9px] font-mono bg-white/10 text-zinc-300 rounded border border-white/10">I</kbd>
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</header>
+<!-- SCROLLABLE BODY -->
+<div class="flex-1 overflow-y-auto overscroll-contain divide-y divide-white/5 p-3 space-y-3">
+<!-- (b) SCENE IDENTITY CARD -->
+<section class="p-3 bg-[#141415] rounded-xl border border-white/5 space-y-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="min-w-0 flex-1">
+<h1 class="text-sm font-bold text-white leading-snug tracking-tight break-words">
+          The Silent Echo (Director's Cut)
+        </h1>
+<div class="flex items-center gap-1.5 mt-0.5">
+<p class="text-[10px] font-mono text-zinc-500 truncate flex-1" title="The.Silent.Echo.2026.UHD.BluRay.2160p.TrueHD.7.1.DV.HEVC.mkv">
+            The.Silent.Echo.2026.UHD.BluRay.2160p.TrueHD.7.1.DV.HEVC.mkv
+          </p>
+<button class="text-[10px] text-zinc-500 hover:text-[#F5B301] p-0.5 rounded hover:bg-white/5 transition-colors" title="Copy file name">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-1.5 text-xs pt-0.5">
+<!-- Studio Pill (Amber accent) -->
+<a class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F5B301]/15 text-[#F5B301] border border-[#F5B301]/40 hover:bg-[#F5B301]/25 transition-all font-semibold text-[10px]" href="#">
+<svg class="w-3 h-3 text-[#F5B301]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+        Aether Studios
+      </a>
+<span class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] font-mono font-bold text-white">
+        4K 60FPS
+      </span>
+<span class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-zinc-300">
+        HEVC 10-BIT
+      </span>
+<span class="text-[10px] text-zinc-400 font-mono">
+        2026-03-18
+      </span>
+<span class="text-[10px] text-[#F5B301] font-mono font-semibold ml-auto">
+        02:14:30
+      </span>
+</div>
+<!-- Performer Pills with shortcut hints -->
+<div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-white/5">
+<span class="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Cast:</span>
+<a class="group inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-300 hover:text-zinc-950 hover:bg-[#F5B301] hover:border-[#F5B301] transition-all text-[11px] font-medium" href="#">
+<span>Elena Rostova</span>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/10 group-hover:bg-black/20 text-zinc-400 group-hover:text-zinc-900 rounded">E</kbd>
+</a>
+<a class="group inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-300 hover:text-zinc-950 hover:bg-[#F5B301] hover:border-[#F5B301] transition-all text-[11px] font-medium" href="#">
+<span>Marcus Vance</span>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/10 group-hover:bg-black/20 text-zinc-400 group-hover:text-zinc-900 rounded">M</kbd>
+</a>
+<a class="group inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-300 hover:text-zinc-950 hover:bg-[#F5B301] hover:border-[#F5B301] transition-all text-[11px] font-medium" href="#">
+<span>Kaelen Cross</span>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/10 group-hover:bg-black/20 text-zinc-400 group-hover:text-zinc-900 rounded">K</kbd>
+</a>
+</div>
+</section>
+<!-- (c) ACTION DOCK (3 equal width buttons with keyboard hints) -->
+<section class="pt-1">
+<div class="grid grid-cols-3 gap-1.5">
+<button class="h-8 px-2 rounded-lg border bg-[#F5B301]/15 text-[#F5B301] border-[#F5B301]/40 hover:bg-[#F5B301]/25 flex items-center justify-center gap-1 text-[11px] font-semibold transition-all shadow-sm shadow-[#F5B301]/20">
+<svg class="w-3.5 h-3.5 fill-[#F5B301] stroke-current" viewbox="0 0 24 24">
+<path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>FAVORITED</span>
+<kbd class="px-1 py-0.2 text-[9px] font-mono bg-black/30 rounded text-[#F5B301] ml-0.5">F</kbd>
+</button>
+<button class="h-8 px-2 rounded-lg border bg-[#141415] text-zinc-300 border-white/10 hover:text-white hover:border-white/20 flex items-center justify-center gap-1 text-[11px] font-medium transition-all">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>PLAYLISTS</span>
+<kbd class="px-1 py-0.2 text-[9px] font-mono bg-white/5 rounded text-zinc-400 ml-0.5">P</kbd>
+</button>
+<button class="h-8 px-2 rounded-lg border bg-[#141415] text-zinc-300 border-white/10 hover:text-white hover:border-white/20 flex items-center justify-center gap-1 text-[11px] font-medium transition-all">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>EDIT</span>
+<kbd class="px-1 py-0.2 text-[9px] font-mono bg-white/5 rounded text-zinc-400 ml-0.5">E</kbd>
+</button>
+</div>
+</section>
+<!-- (d) WATCH-STATUS SEGMENTED CONTROL -->
+<section class="pt-1">
+<div class="grid grid-cols-4 gap-1 p-1 bg-[#141415] border border-white/5 rounded-xl">
+<button class="flex flex-col items-center justify-center py-1 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-all group">
+<div class="flex items-center gap-1 mb-0.5">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/5 group-hover:bg-white/10 rounded text-zinc-400">1</kbd>
+</div>
+<span class="uppercase font-mono tracking-wider text-[9px]">Want</span>
+</button>
+<!-- Active: Watching (Amber Fill) -->
+<button class="flex flex-col items-center justify-center py-1 rounded-lg text-[10px] bg-[#F5B301] text-zinc-950 font-bold shadow-md shadow-[#F5B301]/20 transition-all">
+<div class="flex items-center gap-1 mb-0.5">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-black/20 rounded text-zinc-950 font-black">2</kbd>
+</div>
+<span class="uppercase font-mono tracking-wider text-[9px]">Watching</span>
+</button>
+<button class="flex flex-col items-center justify-center py-1 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-all group">
+<div class="flex items-center gap-1 mb-0.5">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/5 group-hover:bg-white/10 rounded text-zinc-400">3</kbd>
+</div>
+<span class="uppercase font-mono tracking-wider text-[9px]">Watched</span>
+</button>
+<button class="flex flex-col items-center justify-center py-1 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-all group">
+<div class="flex items-center gap-1 mb-0.5">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="9" stroke-width="2"></circle>
+<path d="M5.5 5.5l13 13" stroke-linecap="round" stroke-width="2"></path>
+</svg>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/5 group-hover:bg-white/10 rounded text-zinc-400">4</kbd>
+</div>
+<span class="uppercase font-mono tracking-wider text-[9px]">Skip</span>
+</button>
+</div>
+</section>
+<!-- (e) CHAPTERS & KEY MOMENTS (Dense Power-User Centerpiece) -->
+<section class="space-y-2.5 pt-1">
+<!-- Header -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F5B301] opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-[#F5B301]"></span>
+</span>
+<span class="font-headline tracking-tighter uppercase font-black text-sm text-white" style="font-family: Anton, sans-serif;">
+          Chapters &amp; Key Moments
+        </span>
+<span class="px-1.5 py-0.2 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-[#F5B301] font-semibold">
+          6
+        </span>
+</div>
+<div class="flex items-center gap-1.5">
+<button class="flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-medium rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/10 transition-colors" title="Export clip (X)">
+<span>Clip</span>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-white/10 text-zinc-300 rounded">X</kbd>
+</button>
+<button class="flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold rounded-lg bg-[#F5B301] hover:bg-[#FFC52F] text-zinc-950 transition-colors shadow-sm shadow-[#F5B301]/20">
+<span>+ Marker</span>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-black/20 text-zinc-950 rounded font-black">C</kbd>
+</button>
+</div>
+</div>
+<!-- MINI TIMELINE TRACK -->
+<div class="p-2 rounded-xl bg-[#141415] border border-white/5 space-y-1.5">
+<div class="h-3 w-full bg-black/50 rounded overflow-hidden relative cursor-pointer border border-white/10">
+<div class="absolute top-0 bottom-0 opacity-80 border-r border-black/40" style="left: 0%; width: 12%; background-color: #0EA5E9;" title="Prologue: Neon Arrival (Intro)"></div>
+<div class="absolute top-0 bottom-0 opacity-80 border-r border-black/40" style="left: 12%; width: 22%; background-color: #E50914;" title="Corridor Standoff (Main)"></div>
+<div class="absolute top-0 bottom-0 opacity-90 border-r border-black/40" style="left: 34%; width: 18%; background-color: #8B5CF6;" title="The Catalyst Reveal (Orgasm)"></div>
+<div class="absolute top-0 bottom-0 opacity-80 border-r border-black/40" style="left: 52%; width: 15%; background-color: #14B8A6;" title="Rainy Reflections (Solo)"></div>
+<div class="absolute top-0 bottom-0 opacity-80 border-r border-black/40" style="left: 67%; width: 20%; background-color: #F59E0B;" title="Countermeasures (Anal)"></div>
+<div class="absolute top-0 bottom-0 opacity-80" style="left: 87%; width: 13%; background-color: #6366F1;" title="Resolution (Ending)"></div>
+<!-- Played progress shade -->
+<div class="absolute top-0 bottom-0 left-0 bg-white/20 pointer-events-none" style="width: 34.4%;"></div>
+<!-- White Playhead -->
+<div class="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] z-20 pointer-events-none" style="left: 34.4%;"></div>
+</div>
+<div class="flex justify-between items-center text-[10px] font-mono text-zinc-500 px-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-[#8B5CF6]"></span>
+<span class="text-[#F5B301] font-semibold">00:46:15</span>
+</div>
+<span>02:14:30</span>
+</div>
+</div>
+<!-- CHAPTER ROWS -->
+<div class="space-y-1.5">
+<!-- Chapter 1 -->
+<div class="group relative p-2 rounded-xl transition-all cursor-pointer border bg-[#141415] border-white/5 hover:border-white/20 hover:bg-[#141415]/90">
+<div class="flex items-start justify-between gap-1.5">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-4 h-4 rounded text-[10px] font-mono font-black text-black flex items-center justify-center shrink-0" style="background-color: #0EA5E9;">1</span>
+<span class="text-xs font-semibold text-white truncate group-hover:text-[#F5B301] transition-colors">Prologue: Neon Arrival</span>
+</div>
+<button class="text-[10px] font-mono text-zinc-400 group-hover:text-white px-1.5 py-0.5 rounded bg-white/5 border border-white/10 shrink-0 flex items-center gap-1 hover:border-[#F5B301]">
+<span>00:00–16:08</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-1 text-[10px] font-mono">
+<span class="capitalize text-sky-400 font-medium">intro · 16m 08s</span>
+<span class="truncate text-zinc-400">Elena Rostova</span>
+</div>
+<div class="h-1 w-full bg-black/60 rounded-full overflow-hidden mt-1.5 relative">
+<div class="absolute top-0 bottom-0 rounded-full" style="left: 0%; width: 12%; background-color: #0EA5E9;"></div>
+</div>
+</div>
+<!-- Chapter 2 -->
+<div class="group relative p-2 rounded-xl transition-all cursor-pointer border bg-[#141415] border-white/5 hover:border-white/20 hover:bg-[#141415]/90">
+<div class="flex items-start justify-between gap-1.5">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-4 h-4 rounded text-[10px] font-mono font-black text-white flex items-center justify-center shrink-0" style="background-color: #E50914;">2</span>
+<span class="text-xs font-semibold text-white truncate group-hover:text-[#F5B301] transition-colors">Corridor Standoff</span>
+</div>
+<button class="text-[10px] font-mono text-zinc-400 group-hover:text-white px-1.5 py-0.5 rounded bg-white/5 border border-white/10 shrink-0 flex items-center gap-1 hover:border-[#F5B301]">
+<span>16:08–45:40</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-1 text-[10px] font-mono">
+<span class="capitalize text-red-400 font-medium">main · 29m 32s</span>
+<span class="truncate text-zinc-400">Marcus Vance</span>
+</div>
+<div class="h-1 w-full bg-black/60 rounded-full overflow-hidden mt-1.5 relative">
+<div class="absolute top-0 bottom-0 rounded-full" style="left: 12%; width: 22%; background-color: #E50914;"></div>
+</div>
+</div>
+<!-- Chapter 3: LIVE ACTIVE CHAPTER -->
+<div class="group relative p-2 rounded-xl transition-all cursor-pointer border bg-[#141415] border-[#F5B301] shadow-[0_0_12px_rgba(245,179,1,0.2)] pl-2.5 border-l-4 border-l-[#F5B301]">
+<div class="flex items-start justify-between gap-1.5">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="w-4 h-4 rounded text-[10px] font-mono font-black text-white flex items-center justify-center shrink-0" style="background-color: #8B5CF6;">3</span>
+<span class="text-xs font-bold text-[#F5B301] truncate">The Catalyst Reveal</span>
+<span class="px-1 py-0.2 rounded bg-[#F5B301] text-zinc-950 text-[9px] font-mono font-black tracking-wider animate-pulse">NOW</span>
+</div>
+<button class="text-[10px] font-mono text-white px-1.5 py-0.5 rounded bg-[#F5B301]/20 border border-[#F5B301]/40 shrink-0 font-bold">
+            45:40–1:09:50
+          </button>
+</div>
+<div class="flex items-center justify-between mt-1 text-[10px] font-mono text-zinc-400">
+<span class="capitalize text-purple-400 font-semibold">orgasm · 24m 10s</span>
+<span class="truncate text-zinc-300">Elena, Marcus</span>
+</div>
+<div class="h-1 w-full bg-black/60 rounded-full overflow-hidden mt-1.5 relative">
+<div class="absolute top-0 bottom-0 rounded-full" style="left: 34%; width: 18%; background-color: #8B5CF6;"></div>
+</div>
+<!-- Hover Action Strip with kbd shortcuts -->
+<div class="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-end gap-1 text-[9px] font-mono">
+<button class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors" title="Duplicate (D)">
+<span>Dup</span>
+<kbd class="text-[8px] opacity-70">D</kbd>
+</button>
+<button class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 hover:bg-[#F5B301]/20 text-zinc-400 hover:text-[#F5B301] transition-colors" title="Clip (X)">
+<span>Clip</span>
+<kbd class="text-[8px] opacity-70">X</kbd>
+</button>
+<button class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors" title="Edit (E)">
+<span>Edit</span>
+<kbd class="text-[8px] opacity-70">E</kbd>
+</button>
+<button class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition-colors" title="Delete (Del)">
+<span>Del</span>
+<kbd class="text-[8px] opacity-70">Del</kbd>
+</button>
+</div>
+</div>
+<!-- Chapter 4 -->
+<div class="group relative p-2 rounded-xl transition-all cursor-pointer border bg-[#141415] border-white/5 hover:border-white/20 hover:bg-[#141415]/90">
+<div class="flex items-start justify-between gap-1.5">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-4 h-4 rounded text-[10px] font-mono font-black text-black flex items-center justify-center shrink-0" style="background-color: #14B8A6;">4</span>
+<span class="text-xs font-semibold text-white truncate group-hover:text-[#F5B301] transition-colors">Rainy Reflections</span>
+</div>
+<button class="text-[10px] font-mono text-zinc-400 group-hover:text-white px-1.5 py-0.5 rounded bg-white/5 border border-white/10 shrink-0 flex items-center gap-1 hover:border-[#F5B301]">
+<span>1:09:50–1:30:00</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-1 text-[10px] font-mono">
+<span class="capitalize text-teal-400 font-medium">solo · 20m 10s</span>
+<span class="truncate text-zinc-400">Elena Rostova</span>
+</div>
+<div class="h-1 w-full bg-black/60 rounded-full overflow-hidden mt-1.5 relative">
+<div class="absolute top-0 bottom-0 rounded-full" style="left: 52%; width: 15%; background-color: #14B8A6;"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- (f) TRANSCRIPT & DIALOGUES (Fully Resolved Power-User Panel) -->
+<section class="space-y-2 pt-1">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-headline tracking-tighter uppercase font-black text-sm text-white" style="font-family: Anton, sans-serif;">
+          Transcript &amp; Dialogues
+        </span>
+<span class="px-1.5 py-0.2 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-zinc-400 font-semibold">
+          4 cues
+        </span>
+</div>
+<svg class="w-3.5 h-3.5 text-zinc-400 rotate-180" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Quick Filter Bar -->
+<div class="relative">
+<input class="w-full h-7 bg-[#141415] border border-white/10 rounded-lg pl-7 pr-2 text-[11px] text-white placeholder-zinc-500 focus:outline-none focus:border-[#F5B301] font-sans" placeholder="Filter dialogue or speaker... (Ctrl+F)" type="text"/>
+<svg class="w-3 h-3 text-zinc-500 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Dialogue Cues List -->
+<div class="space-y-1.5">
+<!-- Cue 1 -->
+<div class="p-2.5 rounded-xl bg-[#141415] border border-white/5 hover:border-white/15 transition-all text-xs space-y-1 group">
+<div class="flex items-center justify-between text-[10px] font-mono">
+<button class="text-[#F5B301] hover:underline flex items-center gap-1 font-bold">
+<svg class="w-2.5 h-2.5 fill-current" viewbox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+<span>00:45:12</span>
+</button>
+<span class="text-zinc-400 font-sans font-semibold">@Elena Rostova</span>
+<button class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white transition-opacity p-0.5">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<p class="text-zinc-300 text-[11px] leading-relaxed">
+          "We didn't come this far just to watch the signals collapse. Look at the trace."
+        </p>
+</div>
+<!-- Cue 2: Active NOW Playing Cue -->
+<div class="p-2.5 rounded-xl bg-[#141415] border border-[#F5B301] shadow-[0_0_10px_rgba(245,179,1,0.15)] text-xs space-y-1 pl-2.5 border-l-4 border-l-[#F5B301]">
+<div class="flex items-center justify-between text-[10px] font-mono">
+<div class="flex items-center gap-1.5">
+<button class="px-1.5 py-0.2 rounded bg-[#F5B301] text-zinc-950 font-bold flex items-center gap-1">
+<svg class="w-2.5 h-2.5 fill-current" viewbox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+<span>00:46:15</span>
+</button>
+<span class="px-1 py-0.2 text-[8px] font-black bg-[#F5B301]/20 text-[#F5B301] rounded uppercase animate-pulse">NOW</span>
+</div>
+<span class="text-[#F5B301] font-sans font-bold">@Marcus Vance</span>
+<div class="flex items-center gap-0.5 text-[#F5B301]">
+<span class="w-0.5 h-2.5 bg-[#F5B301] rounded-full animate-pulse"></span>
+<span class="w-0.5 h-4 bg-[#F5B301] rounded-full animate-pulse"></span>
+<span class="w-0.5 h-2 bg-[#F5B301] rounded-full animate-pulse"></span>
+</div>
+</div>
+<p class="text-white font-medium text-[11px] leading-relaxed">
+          "The echo isn't ambient feedback. It's synchronous. Someone is transmitting back."
+        </p>
+</div>
+<!-- Cue 3: Inline Edit Mode Example -->
+<div class="p-2.5 rounded-xl bg-[#141415] border border-[#F5B301]/60 text-xs space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+<span class="text-[#F5B301] font-bold">00:47:04</span>
+<span class="text-zinc-400">Editing Dialogue · Elena</span>
+</div>
+<textarea class="w-full bg-[#0A0A0B] border border-white/15 rounded p-1.5 text-[11px] text-white focus:outline-none focus:border-[#F5B301] resize-none font-sans" rows="2">"Then lock down the auxiliary arrays before they locate the primary feed."</textarea>
+<div class="flex items-center justify-between text-[10px] font-mono">
+<span class="text-zinc-500 text-[9px]">Ctrl+Enter Save · Esc Cancel</span>
+<div class="flex items-center gap-1.5">
+<button class="px-2 py-0.5 rounded text-zinc-400 hover:text-white text-[10px]">Cancel</button>
+<button class="px-2 py-0.5 rounded bg-[#F5B301] hover:bg-[#FFC52F] text-zinc-950 font-bold text-[10px]">Save</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- (g) SCENE NOTES (Power Composer & Cards) -->
+<section class="space-y-2 pt-1 pb-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-headline tracking-tighter uppercase font-black text-sm text-white" style="font-family: Anton, sans-serif;">
+          Scene Notes
+        </span>
+<span class="px-1.5 py-0.2 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-[#F5B301] font-semibold">
+          2
+        </span>
+</div>
+<svg class="w-3.5 h-3.5 text-zinc-400 rotate-180" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Add Note Composer -->
+<div class="p-2.5 bg-[#141415] rounded-xl border border-white/5 space-y-2">
+<textarea class="w-full bg-[#0A0A0B] border border-white/10 rounded-lg p-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#F5B301] resize-none" placeholder="Add timestamp note or review... (Enter to post, Shift+Enter newline)" rows="2"></textarea>
+<div class="flex items-center justify-between text-[11px] font-mono">
+<div class="flex items-center gap-1.5">
+<button class="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-[#F5B301] transition-colors text-[10px] flex items-center gap-1 border border-white/5">
+<span>@ Tag Performer</span>
+</button>
+<span class="text-[10px] text-zinc-500">@00:46:15</span>
+</div>
+<button class="flex items-center gap-1 px-2.5 py-1 bg-[#F5B301] hover:bg-[#FFC52F] text-zinc-950 font-bold rounded-lg text-xs transition-colors shadow-sm shadow-[#F5B301]/20">
+<span>Post Note</span>
+<kbd class="px-1 py-0.2 text-[8px] font-mono bg-black/20 text-zinc-950 rounded font-black">↵ Enter</kbd>
+</button>
+</div>
+</div>
+<!-- Comments List -->
+<div class="space-y-1.5">
+<div class="p-2.5 rounded-xl bg-[#141415] border border-white/5 text-xs space-y-1 group">
+<div class="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+<span>Yesterday at 22:14</span>
+<div class="flex items-center gap-1.5">
+<span class="text-[#F5B301] font-semibold bg-[#F5B301]/10 px-1.5 py-0.2 rounded border border-[#F5B301]/30">@Elena</span>
+<button class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 transition-opacity p-0.5" title="Delete note">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</div>
+<p class="text-zinc-200 text-[11px] leading-normal">
+          Exceptional cinematography during <span class="text-[#F5B301] font-medium">@Elena</span>'s sequence in the rain. Color timing is benchmark reference quality.
+        </p>
+</div>
+<div class="p-2.5 rounded-xl bg-[#141415] border border-white/5 text-xs space-y-1 group">
+<div class="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+<span>3 days ago · 00:46:15</span>
+<div class="flex items-center gap-1.5">
+<span class="text-zinc-400 bg-white/5 px-1.5 py-0.2 rounded border border-white/10">Audio Tag</span>
+<button class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 transition-opacity p-0.5" title="Delete note">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</div>
+<p class="text-zinc-200 text-[11px] leading-normal">
+          Bookmark for audio system demonstration. DTS-HD 7.1 dynamic range peak.
+        </p>
+</div>
+</div>
+</section>
+</div>
+<!-- FOOTER KEYBOARD SHORTCUTS STRIP -->
+<footer class="px-3 py-1.5 bg-[#0A0A0B] border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-zinc-500 shrink-0 select-none">
+<div class="flex flex-wrap items-center gap-2">
+<span class="flex items-center gap-0.5"><kbd class="px-1 py-0.2 bg-white/5 border border-white/10 rounded text-zinc-300">C</kbd> Mark</span>
+<span class="flex items-center gap-0.5"><kbd class="px-1 py-0.2 bg-white/5 border border-white/10 rounded text-zinc-300">I</kbd> Toggle</span>
+<span class="flex items-center gap-0.5"><kbd class="px-1 py-0.2 bg-white/5 border border-white/10 rounded text-zinc-300">Esc</kbd> Back</span>
+<span class="flex items-center gap-0.5 hidden sm:inline-flex"><kbd class="px-1 py-0.2 bg-white/5 border border-white/10 rounded text-zinc-300">Space</kbd> Play</span>
+<span class="flex items-center gap-0.5 hidden sm:inline-flex"><kbd class="px-1 py-0.2 bg-white/5 border border-white/10 rounded text-zinc-300">J/K/L</kbd> Shuttle</span>
+</div>
+<span class="text-zinc-600 font-medium">PersonalFlix Inspector v3.2</span>
+</footer></aside>
+</body>
+</html>

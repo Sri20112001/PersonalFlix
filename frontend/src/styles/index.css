@@ -1,0 +1,134 @@
+@import "./animations.css";
+@import "./glass.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-accent: #f5b301;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  background-color: #0a0a0b;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: "Anton", sans-serif;
+}
+
+.rail-container::-webkit-scrollbar {
+  display: none;
+}
+.rail-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2d;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+/* Light-Blocker Overlay on Pseudo-Element (opt-in via body.light-blocker) */
+/* body.light-blocker::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: contrast(108%) brightness(82%);
+  -webkit-backdrop-filter: contrast(108%) brightness(82%);
+  mix-blend-mode: multiply;
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              backdrop-filter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+} */
+
+/* Warm Night Shift Variant (Reduces harsh blue light spikes) */
+/* body.light-blocker.night-shield::after {
+  background: rgba(20, 10, 0, 0.25);
+  backdrop-filter: brightness(80%) sepia(18%);
+  -webkit-backdrop-filter: brightness(80%) sepia(18%);
+} */
+
+/* Text legibility while the Light-Blocker is ON.
+   The multiply overlay dims text along with everything else, so glyphs get
+   a dark outline + soft light halo, and the dimmest grays step up one level.
+   Scoped strictly to body.light-blocker — untouched when the toggle is off. */
+/* body.light-blocker h1,
+body.light-blocker h2,
+body.light-blocker h3,
+body.light-blocker p,
+body.light-blocker span,
+body.light-blocker a,
+body.light-blocker button,
+body.light-blocker li,
+body.light-blocker td,
+body.light-blocker label,
+body.light-blocker input {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 14px rgba(255, 255, 255, 0.16);
+} */
+body.light-blocker .text-zinc-500,
+body.light-blocker .text-textMuted {
+  color: #a1a1aa;
+}
+body.light-blocker .text-zinc-400,
+body.light-blocker .text-textSecondary {
+  color: #d4d4d8;
+}
+body.light-blocker .text-zinc-600 {
+  color: #8b8b93;
+}
+
+/* Keep video + images punchy while the Light-Blocker is ON.
+   Media is lifted just above the overlay (z-99999), so the dim layer never
+   touches it — no brightness compensation needed. Every positioned layer
+   (controls, badges, dropdowns, modals, sticky bars) is lifted above the
+   media in one generic rule, preserving clicks and paint order by DOM.
+   Safe: no video/img tag in the app uses absolute/fixed/sticky positioning,
+   and replaced elements have no children, so nothing else shifts. */
+body.light-blocker video,
+body.light-blocker img {
+  position: relative;
+  z-index: 100000;
+}
+body.light-blocker [class~="absolute"],
+body.light-blocker [class~="fixed"],
+body.light-blocker [class~="sticky"] {
+  z-index: 100001;
+}
+/* Cinematic subtitle cues (native <track> rendering, incl. fullscreen). */
+video::cue {
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 1.1rem;
+  line-height: 1.4;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+video::-webkit-media-text-track-display {
+  overflow: visible !important;
+}
+

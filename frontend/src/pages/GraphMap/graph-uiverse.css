@@ -1,0 +1,492 @@
+/* ==========================================================================
+   Graph Map — Uiverse-style component kit (scoped with `uv-` prefix)
+   Original implementations of popular Uiverse.io patterns, re-themed for
+   PersonalFlix (accent #F5B301, indigo studios, dark glass surfaces):
+     uv-tabs    sliding-glider segmented control (mode switcher)
+     uv-chip    neon checkbox chip (studio / performer / scene filters)
+     uv-search  icon search box with focus glow + clear button
+     uv-iconbtn glow icon button (fit view / pause physics)
+     uv-select  styled native select (min-scenes filter)
+     uv-menu    search results dropdown panel
+     uv-card    gradient-border profile card (inspector headers)
+     uv-cta     shine-sweep call-to-action button (Play Scene)
+     uv-ghostbtn ghost outline button (profile / catalog links)
+     uv-stat    metrics-bar stat chip
+   Behavior intentionally unchanged — pure presentation layer.
+   ========================================================================== */
+
+.uv-scope {
+  --uv-accent: #f5b301;
+  --uv-accent-soft: #ffc52f;
+  --uv-indigo: #6366f1;
+  --uv-surface: rgba(20, 20, 21, 0.9);
+  --uv-panel-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- Sliding-glider tabs (mode switcher) ---------- */
+.uv-tabs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--uv-surface);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--uv-panel-shadow);
+  backdrop-filter: blur(12px);
+}
+.uv-tabs .uv-glider {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 6px);
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--uv-accent), var(--uv-accent-soft));
+  box-shadow: 0 0 18px rgba(245, 179, 1, 0.45);
+  transition: transform 0.32s cubic-bezier(0.6, 0.05, 0.2, 1);
+  pointer-events: none;
+}
+.uv-tabs[data-active="1"] .uv-glider {
+  transform: translateX(calc(100% + 4px));
+}
+.uv-tabs button {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  white-space: nowrap;
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.25s ease;
+}
+.uv-tabs button:hover {
+  color: #fff;
+}
+.uv-tabs button.uv-on {
+  color: #0a0a0b;
+}
+
+/* ---------- Neon checkbox chips (node-type filters) ---------- */
+.uv-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--uv-surface);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--uv-panel-shadow);
+  backdrop-filter: blur(12px);
+}
+.uv-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.uv-chip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #52525b;
+  border: 1px solid transparent;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: all 0.25s ease;
+  user-select: none;
+}
+.uv-chip span:hover {
+  opacity: 0.9;
+  color: #fff;
+}
+.uv-chip .uv-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #52525b;
+  transition: all 0.25s ease;
+}
+.uv-chip input:checked + span {
+  opacity: 1;
+}
+.uv-chip input:focus-visible + span {
+  outline: 2px solid var(--uv-accent);
+  outline-offset: 2px;
+}
+.uv-chip.uv-indigo input:checked + span {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.35), inset 0 0 8px rgba(99, 102, 241, 0.12);
+}
+.uv-chip.uv-indigo input:checked + span .uv-dot {
+  background: #a5b4fc;
+  box-shadow: 0 0 8px #818cf8;
+}
+.uv-chip.uv-amber input:checked + span {
+  color: #fde68a;
+  background: rgba(245, 179, 1, 0.14);
+  border-color: rgba(245, 179, 1, 0.5);
+  box-shadow: 0 0 14px rgba(245, 179, 1, 0.3), inset 0 0 8px rgba(245, 179, 1, 0.1);
+}
+.uv-chip.uv-amber input:checked + span .uv-dot {
+  background: var(--uv-accent);
+  box-shadow: 0 0 8px var(--uv-accent);
+}
+.uv-chip.uv-slate input:checked + span {
+  color: #e2e8f0;
+  background: rgba(100, 116, 139, 0.25);
+  border-color: rgba(100, 116, 139, 0.5);
+  box-shadow: 0 0 14px rgba(100, 116, 139, 0.3), inset 0 0 8px rgba(100, 116, 139, 0.12);
+}
+.uv-chip.uv-slate input:checked + span .uv-dot {
+  background: #94a3b8;
+  box-shadow: 0 0 8px #94a3b8;
+}
+
+/* ---------- Search box with icon + focus glow ---------- */
+.uv-search {
+  position: relative;
+}
+.uv-search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: #52525b;
+  pointer-events: none;
+  transition: color 0.25s ease;
+}
+.uv-search input {
+  width: 12rem;
+  background: var(--uv-surface);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 9px 30px 9px 34px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: #fff;
+  outline: none;
+  box-shadow: var(--uv-panel-shadow);
+  backdrop-filter: blur(12px);
+  transition: width 0.3s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+@media (min-width: 640px) {
+  .uv-search input {
+    width: 15rem;
+  }
+}
+.uv-search input::placeholder {
+  color: #52525b;
+}
+.uv-search input:focus {
+  border-color: rgba(245, 179, 1, 0.65);
+  box-shadow: 0 0 0 3px rgba(245, 179, 1, 0.15), var(--uv-panel-shadow);
+}
+.uv-search input:focus ~ svg,
+.uv-search:focus-within svg {
+  color: var(--uv-accent);
+}
+.uv-search .uv-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #71717a;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.uv-search .uv-clear:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---------- Glow icon buttons (fit / pause) ---------- */
+.uv-iconbtn {
+  position: relative;
+  width: 35px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  color: #a1a1aa;
+  background: var(--uv-surface);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--uv-panel-shadow);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all 0.22s ease;
+}
+.uv-iconbtn:hover {
+  color: #fff;
+  border-color: rgba(245, 179, 1, 0.55);
+  box-shadow: 0 0 16px rgba(245, 179, 1, 0.35), var(--uv-panel-shadow);
+  transform: translateY(-1px);
+}
+.uv-iconbtn:active {
+  transform: translateY(1px) scale(0.96);
+}
+.uv-iconbtn.uv-live {
+  color: var(--uv-accent);
+  border-color: rgba(245, 179, 1, 0.6);
+  box-shadow: 0 0 16px rgba(245, 179, 1, 0.4), var(--uv-panel-shadow);
+}
+
+/* ---------- Styled select (min-scenes) ---------- */
+.uv-selectwrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 14px;
+  background: var(--uv-surface);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--uv-panel-shadow);
+  backdrop-filter: blur(12px);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: #a1a1aa;
+}
+.uv-selectwrap select {
+  background: #0a0a0b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: #fff;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.uv-selectwrap select:focus {
+  border-color: var(--uv-accent);
+}
+
+/* ---------- Search results dropdown ---------- */
+.uv-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 18rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  background: rgba(31, 31, 33, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: var(--uv-panel-shadow);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+  z-index: 30;
+  animation: uv-pop 0.18s ease;
+}
+.uv-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.uv-menu button:hover {
+  background: rgba(245, 179, 1, 0.08);
+  border-left-color: var(--uv-accent);
+}
+.uv-menu .uv-mdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+@keyframes uv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- Gradient-border profile card (inspector headers) ---------- */
+.uv-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(#141415, #141415) padding-box,
+    linear-gradient(135deg, rgba(245, 179, 1, 0.5), rgba(255, 255, 255, 0.08) 40%, rgba(99, 102, 241, 0.5)) border-box;
+  border: 1px solid transparent;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.uv-card.uv-indigo {
+  background: linear-gradient(#141415, #141415) padding-box,
+    linear-gradient(135deg, rgba(99, 102, 241, 0.6), rgba(255, 255, 255, 0.08) 45%, rgba(245, 179, 1, 0.35)) border-box;
+}
+.uv-card img {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  object-fit: cover;
+  object-position: top;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  background: #1f1f21;
+  flex-shrink: 0;
+}
+.uv-card .uv-fallback {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Anton, sans-serif;
+  font-size: 30px;
+  color: rgba(255, 255, 255, 0.5);
+  background: #1f1f21;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+.uv-card .uv-sm {
+  width: 64px;
+  height: 64px;
+  font-size: 24px;
+}
+
+/* ---------- Shine-sweep CTA button (Play Scene) ---------- */
+.uv-cta {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 12px;
+  border-radius: 14px;
+  border: none;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0a0a0b;
+  background: linear-gradient(135deg, var(--uv-accent), var(--uv-accent-soft));
+  box-shadow: 0 8px 24px rgba(245, 179, 1, 0.35);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.25s ease, filter 0.25s ease;
+}
+.uv-cta:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 32px rgba(245, 179, 1, 0.55);
+}
+.uv-cta:active {
+  transform: scale(0.98);
+}
+.uv-cta::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-150%) skewX(-12deg);
+  animation: uv-shine 3.2s ease infinite;
+}
+@keyframes uv-shine {
+  0% {
+    transform: translateX(-150%) skewX(-12deg);
+  }
+  55%,
+  100% {
+    transform: translateX(350%) skewX(-12deg);
+  }
+}
+
+/* ---------- Ghost outline button (profile / catalog links) ---------- */
+.uv-ghostbtn {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 0.22s ease;
+}
+.uv-ghostbtn:hover {
+  border-color: rgba(245, 179, 1, 0.6);
+  background: rgba(245, 179, 1, 0.08);
+  box-shadow: 0 0 16px rgba(245, 179, 1, 0.2);
+  color: var(--uv-accent-soft);
+}
+.uv-ghostbtn:active {
+  transform: scale(0.98);
+}
+
+/* ---------- Metrics stat chips ---------- */
+.uv-stats {
+  position: absolute;
+  bottom: 16px;
+  left: 24px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: #71717a;
+}
+.uv-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: rgba(10, 10, 11, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(8px);
+}
+.uv-stat b {
+  color: #fff;
+  font-size: 12px;
+}
+.uv-stat.uv-hot b {
+  color: var(--uv-accent);
+}

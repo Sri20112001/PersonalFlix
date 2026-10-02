@@ -1,0 +1,36 @@
+export const SHORTCUT_ACTIONS = [
+  { id: "playPause", label: "Play / Pause", group: "Playback", default: "Space" },
+  { id: "seekFwd", label: "Seek forward", group: "Playback", default: "ArrowRight" },
+  { id: "seekBack", label: "Seek backward", group: "Playback", default: "ArrowLeft" },
+  { id: "fullscreen", label: "Fullscreen", group: "Playback", default: "f" },
+  { id: "mute", label: "Mute", group: "Playback", default: "m" },
+  { id: "info", label: "Info overlay", group: "Playback", default: "i" },
+  { id: "pip", label: "Picture-in-Picture", group: "Playback", default: "o" },
+  { id: "subtitles", label: "Toggle subtitles", group: "Playback", default: "t" },
+  { id: "next", label: "Next scene", group: "Playback", default: "n" },
+  { id: "prev", label: "Previous scene", group: "Playback", default: "p" },
+  { id: "upNext", label: "Recommendations / Up next", group: "Playback", default: "u" },
+  { id: "randomScene", label: "Surprise Me / Random video", group: "Playback", default: "Shift+R" },
+  { id: "bookmarkChapter", label: "Capture / Bookmark Chapter", group: "Playback", default: "c" },
+  { id: "loopA", label: "Set A-B Loop Start (A)", group: "Playback", default: "[" },
+  { id: "loopB", label: "Set A-B Loop End (B)", group: "Playback", default: "]" },
+  { id: "clearLoop", label: "Toggle / Clear A-B Loop", group: "Playback", default: "\\" },
+  { id: "speedUp", label: "Speed up (0.25x)", group: "Playback", default: ">" },
+  { id: "speedDown", label: "Slow down (0.25x)", group: "Playback", default: "<" },
+  { id: "command", label: "Command Center", group: "Navigation", default: "Ctrl+K" },
+  { id: "home", label: "Home", group: "Navigation", default: "h" },
+  { id: "library", label: "Library", group: "Navigation", default: "l" },
+  { id: "favorites", label: "Favorites", group: "Navigation", default: "Shift+F" },
+  { id: "playlists", label: "Playlists", group: "Navigation", default: "Shift+P" },
+  { id: "multiview", label: "Multiview", group: "Navigation", default: "v" },
+  { id: "settings", label: "Settings", group: "Navigation", default: "g" },
+  { id: "health", label: "Library Health", group: "Navigation", default: "y" },
+  { id: "back", label: "Back to Previous Screen", group: "Navigation", default: "Alt+ArrowLeft" },
+  { id: "newTab", label: "New Tab", group: "Navigation", default: "Ctrl+T" },
+  { id: "closeTab", label: "Close Tab", group: "Navigation", default: "Ctrl+W" },
+  { id: "escape", label: "Close / Back", group: "Navigation", default: "Escape" },
+];
+
+export const DEFAULT_BINDINGS = Object.fromEntries(
+  SHORTCUT_ACTIONS.map((a) => [a.id, a.default])
+);

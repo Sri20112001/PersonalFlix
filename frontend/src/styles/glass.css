@@ -1,0 +1,32 @@
+/* Glassmorphism & Tauri Window Region Utilities */
+
+.overlay-glass {
+  background: rgba(10, 10, 11, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.text-shadow {
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+kbd {
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Custom titlebar (decorations:false) — native window drag region */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] nav,
+[data-tauri-drag-region] input,
+[data-tauri-drag-region] .no-drag {
+  -webkit-app-region: no-drag;
+}
