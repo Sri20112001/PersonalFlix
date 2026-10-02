@@ -8,13 +8,14 @@ import { ROUTES } from "../../constants/routes";
 
 function RowThumb({ src, name, shape = "circle" }) {
   const [failed, setFailed] = useState(false);
-  const cls =
-    shape === "circle" ? "w-7 h-7 rounded-full object-cover object-top" : "w-7 h-7 rounded-md object-cover";
+  const isCircle = shape === "circle";
+  const cls = isCircle ? "w-7 h-7 rounded-full object-cover object-top" : "w-7 h-7 rounded-md object-cover";
+
   if (!src || failed) {
     return (
       <span
-        className={`w-7 h-7 flex-shrink-0 flex items-center justify-center font-display text-sm text-accent bg-accent/10 border border-accent/20 ${
-          shape === "circle" ? "rounded-full" : "rounded-md"
+        className={`w-7 h-7 flex-shrink-0 flex items-center justify-center font-mono text-[11px] font-bold text-amber-300 bg-amber-400/10 border border-amber-400/20 ${
+          isCircle ? "rounded-full" : "rounded-md"
         }`}
       >
         {(name || "?")[0].toUpperCase()}
@@ -27,56 +28,59 @@ function RowThumb({ src, name, shape = "circle" }) {
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className={`${cls} flex-shrink-0 bg-black/40 border border-white/10`}
+      className={`${cls} flex-shrink-0 bg-black/60 border border-white/10`}
     />
   );
 }
 
-function Bars({ rows, valueKey = "count", suffix = "", labelKey, imageOf, imageShape, linkOf }) {
+function MetricBars({ rows, valueKey = "count", suffix = "", labelKey, imageOf, imageShape, linkOf }) {
   const max = Math.max(1, ...rows.map((r) => r[valueKey] || 0));
+
   return (
     <div className="flex flex-col gap-2">
       {rows.map((r, i) => {
         const label = labelKey ? r[labelKey] : r.name || r.week || r.day?.slice(5) || r.title;
         const to = linkOf ? linkOf(r) : null;
-        const row = (
-          <>
+        const val = r[valueKey] || 0;
+        const pct = Math.min(100, Math.max(0, (val / max) * 100));
+
+        const content = (
+          <div className="group flex items-center gap-2.5 p-1 rounded-lg hover:bg-white/[0.03] transition-colors">
             {imageOf && <RowThumb src={imageOf(r)} name={label} shape={imageShape} />}
-            <span className="w-36 flex-shrink-0 text-xs text-white truncate text-right group-hover:text-accent transition-colors">
+            <span className="w-28 sm:w-32 flex-shrink-0 text-xs text-zinc-300 truncate group-hover:text-amber-300 transition-colors">
               {label}
             </span>
-            <div className="flex-1 h-2.5 bg-black/50 rounded overflow-hidden">
+            <div className="relative flex-1 h-1.5 rounded-full bg-zinc-900 border border-white/5 overflow-hidden">
               <div
-                className="h-full bg-accent rounded"
-                style={{ width: `${((r[valueKey] || 0) / max) * 100}%` }}
+                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 shadow-[0_0_8px_rgba(251,191,36,0.3)] transition-all duration-300"
+                style={{ width: `${pct}%` }}
               />
             </div>
-            <span className="w-16 flex-shrink-0 text-[11px] font-mono text-textSecondary">
-              {valueKey === "seconds" ? formatTime(r[valueKey] || 0) : `${r[valueKey] || 0}${suffix}`}
+            <span className="w-16 flex-shrink-0 text-[11px] font-mono text-zinc-400 text-right">
+              {valueKey === "seconds" ? formatTime(val) : `${val}${suffix}`}
             </span>
-          </>
-        );
-        return to ? (
-          <Link key={r.id || r.name || r.week || r.day || r.title || i} to={to} className="flex items-center gap-3 group">
-            {row}
-          </Link>
-        ) : (
-          <div key={r.name || r.week || r.day || r.title || i} className="flex items-center gap-3">
-            {row}
           </div>
         );
+
+        return to ? (
+          <Link key={r.id || r.name || r.week || r.day || r.title || i} to={to} className="block">
+            {content}
+          </Link>
+        ) : (
+          <div key={r.name || r.week || r.day || r.title || i}>{content}</div>
+        );
       })}
-      {rows.length === 0 && <div className="text-xs text-textMuted">Not enough data yet.</div>}
+      {rows.length === 0 && <div className="text-xs text-zinc-600 py-1">No records available.</div>}
     </div>
   );
 }
 
-function Heatmap({ days }) {
+function HeatmapGrid({ days }) {
   if (!days || days.length === 0) {
-    return <div className="text-xs text-textMuted">Not enough data yet.</div>;
+    return <div className="text-xs text-zinc-600">No session log data yet.</div>;
   }
   const max = Math.max(1, ...days.map((d) => d.seconds || 0));
-  // Columns = weeks (Monday-first); pad the first column to align weekdays.
+
   const firstDow = (new Date(`${days[0].day}T12:00:00`).getDay() + 6) % 7;
   const cells = [
     ...Array(firstDow).fill(null),
@@ -84,15 +88,16 @@ function Heatmap({ days }) {
   ];
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  const level = (s) => {
-    if (!s || s <= 0) return "bg-white/5";
-    const r = s / max;
-    if (r < 0.25) return "bg-accent/25";
-    if (r < 0.5) return "bg-accent/50";
-    if (r < 0.75) return "bg-accent/75";
-    return "bg-accent";
+
+  const levelColor = (s) => {
+    if (!s || s <= 0) return "bg-white/[0.03] border-white/[0.03]";
+    const ratio = s / max;
+    if (ratio < 0.25) return "bg-amber-500/20 border-amber-500/30";
+    if (ratio < 0.5) return "bg-amber-500/45 border-amber-400/40 shadow-[0_0_6px_rgba(245,158,11,0.2)]";
+    if (ratio < 0.75) return "bg-amber-400/75 border-amber-300/60 shadow-[0_0_8px_rgba(251,191,36,0.35)]";
+    return "bg-amber-300 border-yellow-200 shadow-[0_0_12px_rgba(253,224,71,0.6)]";
   };
-  // Streaks over active days (any watch time).
+
   const active = days.map((d) => (d.seconds || 0) > 0);
   let longest = 0, run = 0;
   for (const a of active) {
@@ -101,16 +106,17 @@ function Heatmap({ days }) {
   }
   let current = 0;
   const tail = [...active];
-  if (!tail[tail.length - 1]) tail.pop(); // today not over yet — don't break the streak
+  if (!tail[tail.length - 1]) tail.pop();
   while (tail.length && tail[tail.length - 1]) {
     current++;
     tail.pop();
   }
+
   return (
     <div>
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none">
         {weeks.map((w, wi) => (
-          <div key={wi} className="flex flex-col gap-1 flex-shrink-0">
+          <div key={wi} className="flex flex-col gap-1.5 flex-shrink-0">
             {Array.from({ length: 7 }).map((_, di) => {
               const c = w[di];
               if (!c) return <span key={di} className="w-3 h-3" />;
@@ -118,28 +124,29 @@ function Heatmap({ days }) {
                 <span
                   key={di}
                   title={`${c.day} · ${formatTime(c.seconds || 0)}`}
-                  className={`w-3 h-3 rounded-[3px] ${level(c.seconds)}`}
+                  className={`w-3 h-3 rounded-[3px] border transition-transform hover:scale-125 cursor-pointer ${levelColor(
+                    c.seconds
+                  )}`}
                 />
               );
             })}
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between mt-3">
-        <div className="flex items-center gap-1.5 text-[10px] text-textMuted">
-          <span>Less</span>
-          {["bg-white/5", "bg-accent/25", "bg-accent/50", "bg-accent/75", "bg-accent"].map((c) => (
-            <span key={c} className={`w-3 h-3 rounded-[3px] ${c}`} />
-          ))}
-          <span>More</span>
+
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5 text-[10px] text-zinc-500 font-mono">
+        <div className="flex items-center gap-1.5">
+          <span>Cold</span>
+          <span className="w-2 h-2 rounded-[2px] bg-white/[0.04]" />
+          <span className="w-2 h-2 rounded-[2px] bg-amber-500/25" />
+          <span className="w-2 h-2 rounded-[2px] bg-amber-500/50" />
+          <span className="w-2 h-2 rounded-[2px] bg-amber-400" />
+          <span>Hot</span>
         </div>
-        <div className="flex items-center gap-3 text-[11px] font-mono text-textSecondary">
-          <span>
-            <b className="text-accent">{current}d</b> streak
-          </span>
-          <span>
-            <b className="text-white">{longest}d</b> best
-          </span>
+
+        <div className="flex items-center gap-3">
+          <span>Streak: <b className="text-amber-300 font-bold">{current}d</b></span>
+          <span>Best: <b className="text-zinc-200 font-bold">{longest}d</b></span>
         </div>
       </div>
     </div>
@@ -147,187 +154,248 @@ function Heatmap({ days }) {
 }
 
 export default function AnalyticsPage() {
-  const { data, loading, cards, watchTime, watchTimeExact, hasExact, watchCards, daily, heatmap, completion, topScenes, ratingBuckets } =
-    useAnalytics();
+  const {
+    data,
+    loading,
+    cards,
+    watchTime,
+    watchTimeExact,
+    hasExact,
+    watchCards,
+    daily,
+    heatmap,
+    completion,
+    topScenes,
+    ratingBuckets,
+  } = useAnalytics();
+
+  const [categoryMode, setCategoryMode] = useState("count"); // "count" | "seconds"
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-[#090a0d]">
         <Spinner />
       </div>
     );
   }
+
   if (!data) {
     return (
-      <div className="h-full flex items-center justify-center text-sm text-textMuted">
-        No data.
+      <div className="h-full flex items-center justify-center text-sm font-mono text-zinc-600 bg-[#090a0d]">
+        NO ANALYTICS INITIALIZED
       </div>
     );
   }
 
   return (
-    <div className="h-full bg-background pt-6 px-10 overflow-y-auto">
-      <div className="pb-12">
-        <h1 className="font-display uppercase tracking-widest text-2xl mb-1">Your Library</h1>
-        <p className="text-xs text-textMuted mb-6">
-          {data.scenesTotal} scenes Â· {data.rated} rated Â· {data.skipped} skipped
-        </p>
+    <div className="h-full bg-[#090a0d] text-zinc-100 p-6 md:p-8 overflow-y-auto">
+      <div className="max-w-[1400px] mx-auto pb-14 space-y-6">
 
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-8">
-          {cards.map(([label, value]) => (
-            <div key={label} className="bg-surface rounded-lg px-4 py-3">
-              <div className="text-xl font-display tracking-wide text-white truncate">{value}</div>
-              <div className="text-[10px] uppercase tracking-widest text-textSecondary mt-1">{label}</div>
+        {/* 1. Integrated Header & Quick Telemetry HUD */}
+        <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5 md:p-6 shadow-xl">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-white/5">
+            <div>
+              <div className="flex items-center gap-2 text-[10px] font-mono tracking-widest text-amber-400/90 uppercase mb-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                Library Intelligence
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white font-display">
+                Analytics Control Center
+              </h1>
             </div>
-          ))}
-        </div>
 
-        {/* Watch-time details */}
-        <h2 className="font-display uppercase tracking-widest text-lg mb-1">Watch time</h2>
-        <p className="text-xs text-textMuted mb-4">
-          {hasExact ? (
-            <>
-              Exact session log · {watchTimeExact.sessions || 0} sessions ·{" "}
-              {watchTimeExact.events || 0} events · catalog runtime{" "}
-              {formatTotalDuration(watchTime.totalDuration || 0)}
-            </>
-          ) : (
-            <>
-              {watchTime.sessionsToday || 0} sessions today · {watchTime.sessions7d || 0} last 7d ·{" "}
-              {watchTime.sessions30d || 0} last 30d · catalog runtime{" "}
-              {formatTotalDuration(watchTime.totalDuration || 0)} · exact log starts on next play
-            </>
-          )}
-        </p>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6">
-          {watchCards.map(([label, value]) => (
-            <div key={label} className="bg-surface rounded-lg px-4 py-3 border border-accent/20">
-              <div className="text-xl font-display tracking-wide text-accent truncate">{value}</div>
-              <div className="text-[10px] uppercase tracking-widest text-textSecondary mt-1">{label}</div>
+            <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 bg-black/40 px-3.5 py-2 rounded-xl border border-white/5 self-start md:self-auto">
+              <span>{data.scenesTotal} Scenes</span>
+              <span className="text-zinc-600">|</span>
+              <span className="text-emerald-400">{data.rated} Rated</span>
+              <span className="text-zinc-600">|</span>
+              <span className="text-zinc-500">{data.skipped} Skipped</span>
             </div>
-          ))}
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-1">
-              Activity · last 120 days
-            </h2>
-            <p className="text-[11px] text-textMuted mb-4">Darker gold = more watch time.</p>
-            <Heatmap days={heatmap} />
           </div>
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-1">
-              Completion
-            </h2>
-            <p className="text-[11px] text-textMuted mb-4">
-              {completion && completion.measured > 0 ? (
-                <>
-                  Avg <b className="text-accent">{completion.avgPct}%</b> watched across{" "}
-                  {completion.measured} measured scenes ·{" "}
-                  <b className="text-white">{completion.finished}</b> finished
-                </>
-              ) : (
-                "Play a scene to the end to measure completion."
-              )}
-            </p>
-            <Bars rows={(completion && completion.buckets) || []} labelKey="label" />
+
+          {/* Quick Stats Rail */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-5">
+            {cards.map(([label, value]) => (
+              <div key={label} className="border-l border-white/10 pl-3">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">{label}</div>
+                <div className="text-xl font-mono font-bold text-white mt-0.5">{value}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-4">
-              Daily watch time · last 30 days
-            </h2>
-            <div className="max-h-64 overflow-y-auto pr-1">
-              <Bars rows={daily} valueKey="seconds" />
+        {/* 2. Main 2-Column Dashboard Body */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+          {/* Left Column: Timeline, Activity & Playback (8 cols) */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* Watch-Time Telemetry Bar */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xs font-mono uppercase tracking-wider text-amber-300 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Watch Time Intervals
+                </h2>
+                <span className="text-[11px] font-mono text-zinc-500">
+                  Total Runtime: {formatTotalDuration(watchTime.totalDuration || 0)}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                {watchCards.map(([label, value]) => (
+                  <div key={label} className="bg-black/30 rounded-xl p-2.5 border border-white/5 text-center">
+                    <div className="text-[9px] font-mono uppercase tracking-wider text-zinc-500">{label}</div>
+                    <div className="text-sm font-mono font-bold text-amber-300 mt-0.5 truncate">{value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-4">
-              Top scenes by watch time
-            </h2>
-            {topScenes.length === 0 ? (
-              <div className="text-xs text-textMuted">Not enough data yet.</div>
-            ) : (
+
+            {/* Heatmap & Playback Completion Grid */}
+            <div className="grid sm:grid-cols-2 gap-6">
+              {/* Activity Heatmap */}
+              <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                  Activity · 120 Days
+                </h3>
+                <HeatmapGrid days={heatmap} />
+              </div>
+
+              {/* Completion Buckets */}
+              <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300">
+                    Completion Breakdown
+                  </h3>
+                  {completion && completion.measured > 0 && (
+                    <span className="text-[10px] font-mono text-amber-300">
+                      {completion.avgPct}% avg
+                    </span>
+                  )}
+                </div>
+                <MetricBars rows={(completion && completion.buckets) || []} labelKey="label" />
+              </div>
+            </div>
+
+            {/* Daily Trend Chart (30 Days) */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                Daily Playback · Last 30 Days
+              </h3>
+              <div className="max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                <MetricBars rows={daily} valueKey="seconds" />
+              </div>
+            </div>
+
+            {/* Top Scenes Leaderboard */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                Top Scenes by Watch Time
+              </h3>
               <div className="flex flex-col gap-2">
-                {topScenes.map((s) => (
+                {topScenes.slice(0, 5).map((s) => (
                   <Link
                     key={s.scene_id}
                     to={ROUTES.scene(s.scene_id)}
-                    className="flex items-center gap-3 group"
+                    className="flex items-center gap-3 p-2 rounded-xl bg-black/20 hover:bg-white/[0.04] border border-white/5 transition-colors group"
                   >
-                    <span className="flex-1 min-w-0 text-xs text-white truncate group-hover:text-accent">
-                      {s.title || `Scene ${s.scene_id}`}
+                    <span className="flex-1 min-w-0 text-xs text-zinc-300 truncate group-hover:text-amber-300 transition-colors">
+                      {s.title || `Scene #${s.scene_id}`}
                     </span>
-                    <span className="w-16 flex-shrink-0 text-right text-[11px] font-mono text-textSecondary">
+                    <span className="text-[11px] font-mono text-zinc-400">
                       {formatTime(s.seconds || 0)}
                     </span>
                     {s.duration > 0 && (
-                      <span className="w-14 flex-shrink-0 text-right text-[10px] font-mono text-textMuted">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-zinc-500">
                         {Math.min(100, Math.round(((s.seconds || 0) / s.duration) * 100))}%
                       </span>
                     )}
                   </Link>
                 ))}
               </div>
-            )}
-            {ratingBuckets.length > 0 && (
-              <div className="mt-5 pt-4 border-t border-white/10">
-                <div className="text-[10px] uppercase tracking-widest text-textMuted mb-2">
-                  Ratings
-                </div>
-                <div className="flex gap-2 flex-wrap">
+
+              {ratingBuckets.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase mr-2">Ratings:</span>
                   {ratingBuckets.map((b) => (
                     <span
                       key={b.rating}
-                      className="text-[11px] font-mono px-2 py-1 rounded bg-black/40 text-textSecondary"
+                      className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-black/40 border border-white/5 text-zinc-300"
                     >
-                      ★{b.rating} · {b.count}
+                      ★{b.rating} <span className="text-amber-400/80">({b.count})</span>
                     </span>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+              )}
+            </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-4">Top studios</h2>
-            <Bars rows={data.topStudios || []} />
-            {(data.topStudios || []).some((r) => r.seconds > 0) && (
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <div className="text-[10px] uppercase tracking-widest text-textMuted mb-2">By watch time</div>
-                <Bars rows={data.topStudios || []} valueKey="seconds" />
+          </div>
+
+          {/* Right Column: Categorical Intelligence Sidebar (4 cols) */}
+          <div className="lg:col-span-4 space-y-6">
+
+            {/* Toggle Hub: Mode Switcher */}
+            <div className="flex items-center justify-between p-1 bg-black/40 border border-white/5 rounded-xl">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 pl-3">Sort Metrics:</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setCategoryMode("count")}
+                  className={`text-[10px] font-mono px-3 py-1 rounded-lg transition-colors ${
+                    categoryMode === "count" ? "bg-amber-400 text-black font-bold" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  By Counts
+                </button>
+                <button
+                  onClick={() => setCategoryMode("seconds")}
+                  className={`text-[10px] font-mono px-3 py-1 rounded-lg transition-colors ${
+                    categoryMode === "seconds" ? "bg-amber-400 text-black font-bold" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  By Time
+                </button>
               </div>
-            )}
+            </div>
+
+            {/* Top Performers */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                Top Performers
+              </h3>
+              <MetricBars
+                rows={data.topPerformers || []}
+                valueKey={categoryMode}
+                imageOf={(r) => (r.id ? performerImage(r.id) : null)}
+                imageShape="circle"
+              />
+            </div>
+
+            {/* Top Studios */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                Top Studios
+              </h3>
+              <MetricBars rows={data.topStudios || []} valueKey={categoryMode} />
+            </div>
+
+            {/* Categories */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                Categories
+              </h3>
+              <MetricBars rows={data.topCategories || []} valueKey={categoryMode} />
+            </div>
+
+            {/* Weekly Volume */}
+            <div className="rounded-2xl bg-zinc-900/40 border border-white/10 backdrop-blur-xl p-5">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 mb-3">
+                Weekly Volume
+              </h3>
+              <MetricBars rows={data.weekly || []} suffix=" scenes" />
+            </div>
+
           </div>
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-4">Top performers</h2>
-            <Bars rows={data.topPerformers || []} />
-            {(data.topPerformers || []).some((r) => r.seconds > 0) && (
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <div className="text-[10px] uppercase tracking-widest text-textMuted mb-2">By watch time</div>
-                <Bars rows={data.topPerformers || []} valueKey="seconds" />
-              </div>
-            )}
-          </div>
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-4">Favorite categories</h2>
-            <Bars rows={data.topCategories || []} />
-            {(data.topCategories || []).some((r) => r.seconds > 0) && (
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <div className="text-[10px] uppercase tracking-widest text-textMuted mb-2">By watch time</div>
-                <Bars rows={data.topCategories || []} valueKey="seconds" />
-              </div>
-            )}
-          </div>
-          <div className="bg-surface rounded-lg p-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-4">Weekly activity</h2>
-            <Bars rows={data.weekly || []} suffix=" scenes" />
-          </div>
+
         </div>
       </div>
     </div>
