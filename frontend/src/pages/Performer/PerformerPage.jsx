@@ -5,6 +5,7 @@ import Spinner from "../../ui/Spinner";
 import { ROUTES } from "../../constants/routes";
 
 import PerformerHero from "./PerformerHero";
+import PerformerEditModal from "./PerformerEditModal";
 import CoStarsSection from "./CoStarsSection";
 import PerformerAttributes from "./PerformerAttributes";
 import FilmographySection from "./FilmographySection";
@@ -26,6 +27,7 @@ export default function Performer() {
   const [loading, setLoading] = useState(true);
   const [imgErr, setImgErr] = useState(false);
   const [showAbout, setShowAbout] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
 
   // Scene search & filter state
   const [sceneSearch, setSceneSearch] = useState("");
@@ -83,33 +85,36 @@ export default function Performer() {
     });
   }, [coStars, scenes]);
 
-  useEffect(() => {
+  const loadPerformer = async () => {
     setLoading(true);
-    (async () => {
-      try {
-        const [perRes, favList] = await Promise.all([
-          api.performer(id),
-          api.favorites().catch(() => []),
-        ]);
+    setImgErr(false);
+    try {
+      const [perRes, favList] = await Promise.all([
+        api.performer(id),
+        api.favorites().catch(() => []),
+      ]);
 
-        const performerData = perRes?.performer || perRes;
-        setP(performerData);
-        setScenes(perRes?.scenes || []);
-        setCategories(perRes?.categories || []);
-        setStudios(perRes?.studios || []);
-        setCoStars(perRes?.co_stars || []);
-        setStats(perRes?.stats || null);
-        setTaggedChapters(perRes?.tagged_chapters || []);
-        setTaggedComments(perRes?.tagged_comments || []);
-        setFavorites(
-          (favList || []).filter((f) => f.type === "performer").map((f) => String(f.target_id))
-        );
-      } catch (e) {
-        console.error("Failed to load performer data", e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+      const performerData = perRes?.performer || perRes;
+      setP(performerData);
+      setScenes(perRes?.scenes || []);
+      setCategories(perRes?.categories || []);
+      setStudios(perRes?.studios || []);
+      setCoStars(perRes?.co_stars || []);
+      setStats(perRes?.stats || null);
+      setTaggedChapters(perRes?.tagged_chapters || []);
+      setTaggedComments(perRes?.tagged_comments || []);
+      setFavorites(
+        (favList || []).filter((f) => f.type === "performer").map((f) => String(f.target_id))
+      );
+    } catch (e) {
+      console.error("Failed to load performer data", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPerformer();
   }, [id]);
 
   const isFav = favorites.includes(String(id));
@@ -264,7 +269,20 @@ export default function Performer() {
         onToggleFavorite={toggleFavorite}
         onPlayRandom={playRandom}
         onBack={handleBack}
+        onEdit={() => setShowEdit(true)}
       />
+
+      {showEdit && (
+        <PerformerEditModal
+          key={p._id || p.id}
+          performer={p}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => {
+            setShowEdit(false);
+            loadPerformer();
+          }}
+        />
+      )}
 
       <div className="px-8 md:px-12 py-8 flex flex-col gap-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

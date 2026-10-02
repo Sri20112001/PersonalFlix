@@ -25,7 +25,8 @@ use crate::api::resolve_video_path;
 use crate::settings::Settings;
 use crate::state::{AppState, TranscribeBatch, TranscribeJobs};
 use axum::extract::{Path, State};
-use axum::routing::get;
+use axum::http::StatusCode;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,7 @@ const WAV_BYTES_PER_SEC: f64 = 32000.0;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/status", get(engine_status))
+        .route("/relocate", post(relocate_engine))
         .route("/batch", get(batch_status).post(start_batch).delete(cancel_batch))
         .route("/{id}", get(job_status).post(start_job))
 }
@@ -69,7 +71,7 @@ fn locate_engine() -> Option<(PathBuf, PathBuf)> {
 
 /// All staged ggml models, largest first.
 fn list_models() -> Option<Vec<(String, PathBuf, u64)>> {
-    let models = Settings::data_dir().join("tools").join("whisper").join("models");
+    let models = Settings::whisper_root().join("models");
     let mut out: Vec<(String, PathBuf, u64)> = std::fs::read_dir(&models)
         .ok()?
         .flatten()
@@ -131,7 +133,7 @@ fn select_model(models: &[(String, PathBuf, u64)], preference: &str) -> Option<P
 }
 
 fn locate_engine_with(preference: &str) -> Option<(PathBuf, PathBuf)> {
-    let root = Settings::data_dir().join("tools").join("whisper");
+    let root = Settings::whisper_root();
     let cli = root.join("Release").join("whisper-cli.exe");
     if !cli.exists() {
         return None;
@@ -204,6 +206,7 @@ async fn engine_status(State(state): State<AppState>) -> Json<serde_json::Value>
                 .collect();
             Json(serde_json::json!({
                 "available": true,
+                "root": Settings::whisper_root().to_string_lossy(),
                 "cli": cli.to_string_lossy(),
                 "model": model.to_string_lossy(),
                 "model_name": model.file_name().and_then(|s| s.to_str()).unwrap_or(""),
@@ -215,13 +218,126 @@ async fn engine_status(State(state): State<AppState>) -> Json<serde_json::Value>
         }
         None => Json(serde_json::json!({
             "available": false,
-            "message": "whisper-cli.exe or a ggml model is missing under %LOCALAPPDATA%/PersonalFlix/tools/whisper",
+            "root": Settings::whisper_root().to_string_lossy(),
+            "message": "whisper-cli.exe or a ggml model is missing under the configured engine folder",
         })),
     }
 }
 
-async fn job_status(State(state): State<AppState>, Path(id): Path<i64>) -> Json<serde_json::Value> {
-    let jobs = jobs_table(&state);
+#[derive(Deserialize, Default)]
+struct RelocateBody {
+    /// New home for the whisper tools folder. Empty resets to the default
+    /// location without moving anything.
+    path: Option<String>,
+}
+
+/// Move the whole whisper tools folder (exe + models, potentially GBs) to a
+/// new location — e.g. off the system drive — and remember it in settings.
+/// Refuses with 409 while a batch or any per-scene job is actively working
+/// (the worker holds cli/model paths). Never clobbers an existing install.
+async fn relocate_engine(
+    State(state): State<AppState>,
+    Json(body): Json<RelocateBody>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if let Some(b) = state.transcribe_batch.lock().unwrap().clone() {
+        if matches!(b.state.as_str(), "queued" | "running") {
+            return Err(StatusCode::CONFLICT);
+        }
+    }
+    {
+        let jobs = jobs_table(&state);
+        let guard = jobs.lock().unwrap();
+        if guard
+            .values()
+            .any(|j| matches!(j.state.as_str(), "queued" | "extracting" | "transcribing"))
+        {
+            return Err(StatusCode::CONFLICT);
+        }
+    }
+
+    let raw = body.path.as_deref().map(str::trim).unwrap_or("");
+    if raw.is_empty() {
+        let mut settings = Settings::load();
+        settings.whisper_dir = None;
+        settings.save();
+        return Ok(Json(serde_json::json!({
+            "ok": true,
+            "root": Settings::whisper_root().to_string_lossy(),
+            "moved": 0,
+        })));
+    }
+    let dst = PathBuf::from(raw);
+    if !dst.is_absolute() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let src = Settings::whisper_root();
+    if dst == src || dst.starts_with(&src) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if !src.exists() {
+        // Nothing staged yet: just point at the new (empty) home.
+        std::fs::create_dir_all(&dst).map_err(|_| StatusCode::BAD_REQUEST)?;
+    } else {
+        std::fs::create_dir_all(&dst).map_err(|_| StatusCode::BAD_REQUEST)?;
+        move_dir_contents(&src, &dst).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        // Remove the old folder when fully drained (no-op otherwise).
+        let _ = std::fs::remove_dir(&src);
+    }
+    let moved = std::fs::read_dir(&dst).map(|r| r.count()).unwrap_or(0);
+    let mut settings = Settings::load();
+    settings.whisper_dir = Some(dst.to_string_lossy().to_string());
+    settings.save();
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "root": Settings::whisper_root().to_string_lossy(),
+        "moved": moved,
+    })))
+}
+
+/// Move every entry of `src` into `dst`. `fs::rename` first (fast,
+/// same-volume); falls back to copy + delete for cross-volume moves.
+/// Entries that already exist at the target are skipped, never clobbered.
+/// Returns the number of top-level entries moved.
+fn move_dir_contents(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<usize> {
+    std::fs::create_dir_all(dst)?;
+    let mut moved = 0usize;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if target.exists() {
+            continue;
+        }
+        if std::fs::rename(entry.path(), &target).is_err() {
+            copy_entry(&entry.path(), &target)?;
+            remove_entry(&entry.path())?;
+        }
+        moved += 1;
+    }
+    Ok(moved)
+}
+
+fn copy_entry(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    if src.is_dir() {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            copy_entry(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        std::fs::copy(src, dst).map(|_| ())
+    }
+}
+
+fn remove_entry(p: &std::path::Path) -> std::io::Result<()> {
+    if p.is_dir() {
+        std::fs::remove_dir_all(p)
+    } else {
+        std::fs::remove_file(p)
+    }
+}
+
+async fn job_status(State(state): State<AppState>, Path(id): Path<i64>) -> Json<serde_json::Value> {    let jobs = jobs_table(&state);
     if let Some(j) = jobs.lock().unwrap().get(&id).cloned() {
         return Json(serde_json::json!(j));
     }
@@ -934,4 +1050,55 @@ async fn run_batch(state: AppState, ids: Vec<i64>, force: bool) {
             b.succeeded, b.skipped, b.failed, b.total
         ));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "pfx-{prefix}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn move_dir_contents_moves_and_never_clobbers() {
+        let src = tmp("reloc-src");
+        let dst = tmp("reloc-dst");
+        std::fs::write(src.join("a.bin"), b"aaa").unwrap();
+        std::fs::create_dir_all(src.join("models")).unwrap();
+        std::fs::write(src.join("models").join("m.bin"), b"mmm").unwrap();
+        // Pre-existing target file must be left alone (source stays put).
+        std::fs::write(dst.join("keep.bin"), b"old").unwrap();
+        std::fs::write(src.join("keep.bin"), b"new").unwrap();
+
+        let moved = move_dir_contents(&src, &dst).unwrap();
+        assert_eq!(moved, 2); // a.bin + models/ (keep.bin skipped)
+        assert_eq!(std::fs::read(dst.join("a.bin")).unwrap(), b"aaa");
+        assert_eq!(
+            std::fs::read(dst.join("models").join("m.bin")).unwrap(),
+            b"mmm"
+        );
+        assert_eq!(std::fs::read(dst.join("keep.bin")).unwrap(), b"old");
+        assert!(src.join("keep.bin").exists());
+        assert!(!src.join("a.bin").exists());
+
+        std::fs::remove_dir_all(&src).ok();
+        std::fs::remove_dir_all(&dst).ok();
+    }
+
+    #[test]
+    fn move_dir_contents_missing_source_errors() {
+        let dst = tmp("reloc-dst2");
+        assert!(move_dir_contents(&dst.join("nope"), &dst).is_err());
+        std::fs::remove_dir_all(&dst).ok();
+    }
 }

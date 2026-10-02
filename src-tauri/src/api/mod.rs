@@ -4,8 +4,10 @@ pub mod categories;
 pub mod collections;
 pub mod comments;
 pub mod download;
+pub mod faces;
 pub mod favorites;
 pub mod graph;
+pub mod integrity;
 pub mod library;
 pub mod performers;
 pub mod playlists;
@@ -42,6 +44,7 @@ pub fn router() -> Router<AppState> {
         .nest("/transcribe", transcribe::routes())
         .nest("/watch-events", watch_events::routes())
         .nest("/favorites", favorites::routes())
+        .nest("/faces", faces::routes())
         .nest("/playlists", playlists::routes())
         .nest("/search", search::routes())
         .nest("/video", video::routes())

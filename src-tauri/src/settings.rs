@@ -13,6 +13,10 @@ pub struct Settings {
     /// disk), a size token ("tiny"|"base"|"small"|"medium"|"large"), or an
     /// exact model filename (e.g. "ggml-small.en.bin").
     pub whisper_model: Option<String>,
+    /// Custom whisper tools location: the `tools/whisper` folder holding
+    /// whisper-cli.exe + ggml models. Lets users move the multi-GB engine
+    /// off the system drive. Empty/unset = default under the data dir.
+    pub whisper_dir: Option<String>,
 }
 
 impl Settings {
@@ -73,6 +77,21 @@ impl Settings {
     pub fn backups_dir() -> PathBuf {
         Self::data_dir().join("backups")
     }
+
+    /// Root of the whisper tools install (`whisper-cli.exe` + `models/`).
+    /// Honors the `whisper_dir` override so the engine can live on any drive;
+    /// otherwise the default under the app data dir.
+    pub fn whisper_root() -> PathBuf {
+        Self::whisper_root_for(Self::load().whisper_dir.as_deref())
+    }
+
+    /// Testable core of [`Self::whisper_root`]: no settings-file IO here.
+    pub fn whisper_root_for(custom: Option<&str>) -> PathBuf {
+        match custom.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(dir) => PathBuf::from(dir),
+            None => Self::data_dir().join("tools").join("whisper"),
+        }
+    }
 }
 
 const SERVER_PORT: u16 = 31731;
@@ -121,4 +140,21 @@ pub fn detect_library_path() -> Option<PathBuf> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn whisper_root_prefers_custom_location() {
+        let def = Settings::data_dir().join("tools").join("whisper");
+        assert_eq!(Settings::whisper_root_for(None), def);
+        assert_eq!(Settings::whisper_root_for(Some("")), def);
+        assert_eq!(Settings::whisper_root_for(Some("   ")), def);
+        assert_eq!(
+            Settings::whisper_root_for(Some(r"P:\AI\whisper")),
+            PathBuf::from(r"P:\AI\whisper")
+        );
+    }
 }

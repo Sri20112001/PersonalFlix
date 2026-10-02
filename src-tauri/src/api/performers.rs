@@ -442,11 +442,22 @@ async fn update(
     Json(body): Json<JValue>,
 ) -> Result<Json<JValue>, StatusCode> {
     let conn = state.db.lock().unwrap();
+    apply_performer_update(&conn, &id, &body).map(Json)
+}
+
+/// Shared PATCH core (handler locks, tests call directly): partial update of
+/// whitelisted scalar/JSON columns. Unknown keys are ignored; an empty
+/// effective set is BAD_REQUEST (fail-closed, like scenes).
+fn apply_performer_update(
+    conn: &Connection,
+    id: &str,
+    body: &JValue,
+) -> Result<JValue, StatusCode> {
     // NOTE (Phase 2B): no scene linkage here — relationships are edited
     // exclusively via scenes.performer_ids.
-    let allowed: [&str; 9] = [
+    let allowed: [&str; 10] = [
         "name", "slug", "source_url", "model_id", "image_url", "views", "country", "gender",
-        "category_ids",
+        "attributes", "category_ids",
     ];
     let mut sets: Vec<String> = Vec::new();
     let mut params: Vec<Value> = Vec::new();
@@ -459,7 +470,7 @@ async fn update(
     if sets.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    params.push(id.clone().into());
+    params.push(Value::Text(id.to_string()));
     let sql = format!("UPDATE performers SET {} WHERE id = ?", sets.join(", "));
     let n = conn
         .execute(&sql, rusqlite::params_from_iter(params.iter()))
@@ -474,7 +485,7 @@ async fn update(
             performer_from_row,
         )
         .map_err(|_| StatusCode::NOT_FOUND)?;
-    Ok(Json(performer))
+    Ok(performer)
 }
 
 #[cfg(test)]
@@ -546,6 +557,40 @@ mod tests {
         assert_eq!(scene_count_for_performer(&conn, "adria-rae"), 1);
         assert_eq!(scene_count_for_performer(&conn, "nobody"), 0);
         assert_eq!(scene_count_for_performer(&conn, "777"), 1);
+    }
+
+    #[test]
+    fn performer_patch_updates_whitelisted_fields_only() {
+        let db = open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO performers(id,name,country,attributes) VALUES('p1','Old Name','US','{\"hair_color\":\"black\"}')",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = db.lock().unwrap();
+        // Partial update incl. the attributes JSON object.
+        let out = apply_performer_update(
+            &conn,
+            "p1",
+            &json!({"name": "New Name", "attributes": {"hair_color": "blonde", "height": "170cm"}}),
+        )
+        .unwrap();
+        assert_eq!(out["name"], "New Name");
+        assert_eq!(out["attributes"]["hair_color"], "blonde");
+        assert_eq!(out["country"], "US"); // untouched fields survive
+
+        // Unknown keys alone are fail-closed; unknown ids are 404.
+        assert_eq!(
+            apply_performer_update(&conn, "p1", &json!({"scene_ids": ["1"]})).unwrap_err(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            apply_performer_update(&conn, "ghost", &json!({"name": "X"})).unwrap_err(),
+            StatusCode::NOT_FOUND
+        );
     }
 }
 

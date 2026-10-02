@@ -1,0 +1,332 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "YT Map" [level=1] [ref=e5]
+    - generic [ref=e6]:
+      - button "Contact Me" [ref=e7] [cursor=pointer]
+      - link "Suggest a Channel" [ref=e8] [cursor=pointer]:
+        - /url: https://docs.google.com/forms/d/e/1FAIpQLScmK6K8iMA6p5psuhqYu5XYOxBR1JKV2PhKpSw36rZnoD5XGA/viewform?usp=dialog
+  - generic [ref=e9]:
+    - heading "New Additions" [level=2] [ref=e10]
+    - region [ref=e11]:
+      - generic [ref=e13]:
+        - group [ref=e14]:
+          - link "SB737 SB737" [ref=e15] [cursor=pointer]:
+            - /url: /sb737
+            - img "SB737" [ref=e16]
+            - generic [ref=e17]: SB737
+        - group [ref=e19]:
+          - link "TommyInnit TommyInnit" [ref=e20] [cursor=pointer]:
+            - /url: /tommyinnit
+            - img "TommyInnit" [ref=e21]
+            - generic [ref=e22]: TommyInnit
+        - group [ref=e24]:
+          - link "Reaper Gaming Reaper Gaming" [ref=e25] [cursor=pointer]:
+            - /url: /reaper-gaming
+            - img "Reaper Gaming" [ref=e26]
+            - generic [ref=e27]: Reaper Gaming
+        - group [ref=e29]:
+          - link "Mr IG Mr IG" [ref=e30] [cursor=pointer]:
+            - /url: /mr-ig
+            - img "Mr IG" [ref=e31]
+            - generic [ref=e32]: Mr IG
+        - group [ref=e34]:
+          - link "Thanjai Gaming Thanjai Gaming" [ref=e35] [cursor=pointer]:
+            - /url: /thanjai-gaming
+            - img "Thanjai Gaming" [ref=e36]
+            - generic [ref=e37]: Thanjai Gaming
+      - button "Previous slide" [ref=e39]
+      - button "Next slide" [ref=e41]
+  - generic [ref=e44]:
+    - link "Technoblade Technoblade Technoblade minimap" [ref=e45] [cursor=pointer]:
+      - /url: /technoblade
+      - generic [ref=e46]:
+        - img "Technoblade" [ref=e47]
+        - generic [ref=e48]: Technoblade
+      - img "Technoblade minimap" [ref=e51]
+    - link "Mr Beast Mr Beast Mr Beast minimap" [ref=e52] [cursor=pointer]:
+      - /url: /mrbeast
+      - generic [ref=e53]:
+        - img "Mr Beast" [ref=e54]
+        - generic [ref=e55]: Mr Beast
+      - img "Mr Beast minimap" [ref=e58]
+    - link "PewDiePie PewDiePie PewDiePie minimap" [ref=e59] [cursor=pointer]:
+      - /url: /pewdiepie
+      - generic [ref=e60]:
+        - img "PewDiePie" [ref=e61]
+        - generic [ref=e62]: PewDiePie
+      - img "PewDiePie minimap" [ref=e65]
+    - link "Markiplier Markiplier Markiplier minimap" [ref=e66] [cursor=pointer]:
+      - /url: /markiplier
+      - generic [ref=e67]:
+        - img "Markiplier" [ref=e68]
+        - generic [ref=e69]: Markiplier
+      - img "Markiplier minimap" [ref=e72]
+    - link "Linus Tech Tips Linus Tech Tips Linus Tech Tips minimap" [ref=e73] [cursor=pointer]:
+      - /url: /linustechtips
+      - generic [ref=e74]:
+        - img "Linus Tech Tips" [ref=e75]
+        - generic [ref=e76]: Linus Tech Tips
+      - img "Linus Tech Tips minimap" [ref=e79]
+    - link "Mrwhosetheboss Mrwhosetheboss Mrwhosetheboss minimap" [ref=e80] [cursor=pointer]:
+      - /url: /mrwhosetheboss
+      - generic [ref=e81]:
+        - img "Mrwhosetheboss" [ref=e82]
+        - generic [ref=e83]: Mrwhosetheboss
+      - img "Mrwhosetheboss minimap" [ref=e86]
+    - link "Marques Brownlee Marques Brownlee Marques Brownlee minimap" [ref=e87] [cursor=pointer]:
+      - /url: /marques-brownlee
+      - generic [ref=e88]:
+        - img "Marques Brownlee" [ref=e89]
+        - generic [ref=e90]: Marques Brownlee
+      - img "Marques Brownlee minimap" [ref=e93]
+    - link "Fireship Fireship Fireship minimap" [ref=e94] [cursor=pointer]:
+      - /url: /fireship
+      - generic [ref=e95]:
+        - img "Fireship" [ref=e96]
+        - generic [ref=e97]: Fireship
+      - img "Fireship minimap" [ref=e100]
+    - link "Sidemen Sidemen Sidemen minimap" [ref=e101] [cursor=pointer]:
+      - /url: /sidemen
+      - generic [ref=e102]:
+        - img "Sidemen" [ref=e103]
+        - generic [ref=e104]: Sidemen
+      - img "Sidemen minimap" [ref=e107]
+    - link "SidemenReacts SidemenReacts SidemenReacts minimap" [ref=e108] [cursor=pointer]:
+      - /url: /sidemenreacts
+      - generic [ref=e109]:
+        - img "SidemenReacts" [ref=e110]
+        - generic [ref=e111]: SidemenReacts
+      - img "SidemenReacts minimap" [ref=e114]
+    - link "MoreSidemen MoreSidemen MoreSidemen minimap" [ref=e115] [cursor=pointer]:
+      - /url: /moresidemen
+      - generic [ref=e116]:
+        - img "MoreSidemen" [ref=e117]
+        - generic [ref=e118]: MoreSidemen
+      - img "MoreSidemen minimap" [ref=e121]
+    - link "DanTDM DanTDM DanTDM minimap" [ref=e122] [cursor=pointer]:
+      - /url: /dantdm
+      - generic [ref=e123]:
+        - img "DanTDM" [ref=e124]
+        - generic [ref=e125]: DanTDM
+      - img "DanTDM minimap" [ref=e128]
+    - link "DIYPerks DIYPerks DIYPerks minimap" [ref=e129] [cursor=pointer]:
+      - /url: /diyperks
+      - generic [ref=e130]:
+        - img "DIYPerks" [ref=e131]
+        - generic [ref=e132]: DIYPerks
+      - img "DIYPerks minimap" [ref=e135]
+    - link "theRadBrad theRadBrad theRadBrad minimap" [ref=e136] [cursor=pointer]:
+      - /url: /theradbrad
+      - generic [ref=e137]:
+        - img "theRadBrad" [ref=e138]
+        - generic [ref=e139]: theRadBrad
+      - img "theRadBrad minimap" [ref=e142]
+    - link "reddoons reddoons reddoons minimap" [ref=e143] [cursor=pointer]:
+      - /url: /reddoons
+      - generic [ref=e144]:
+        - img "reddoons" [ref=e145]
+        - generic [ref=e146]: reddoons
+      - img "reddoons minimap" [ref=e149]
+    - link "New SB737 SB737 SB737 minimap" [ref=e150] [cursor=pointer]:
+      - /url: /sb737
+      - generic [ref=e151]:
+        - generic [ref=e152]: New
+        - img "SB737" [ref=e153]
+        - generic [ref=e154]: SB737
+      - img "SB737 minimap" [ref=e157]
+    - link "DrDonutt DrDonutt DrDonutt minimap" [ref=e158] [cursor=pointer]:
+      - /url: /drdonutt
+      - generic [ref=e159]:
+        - img "DrDonutt" [ref=e160]
+        - generic [ref=e161]: DrDonutt
+      - img "DrDonutt minimap" [ref=e164]
+    - link "New TommyInnit TommyInnit TommyInnit minimap" [ref=e165] [cursor=pointer]:
+      - /url: /tommyinnit
+      - generic [ref=e166]:
+        - generic [ref=e167]: New
+        - img "TommyInnit" [ref=e168]
+        - generic [ref=e169]: TommyInnit
+      - img "TommyInnit minimap" [ref=e172]
+    - link "Grian Grian Grian minimap" [ref=e173] [cursor=pointer]:
+      - /url: /grian
+      - generic [ref=e174]:
+        - img "Grian" [ref=e175]
+        - generic [ref=e176]: Grian
+      - img "Grian minimap" [ref=e179]
+    - link "Mumbo Jumbo Mumbo Jumbo Mumbo Jumbo minimap" [ref=e180] [cursor=pointer]:
+      - /url: /mumbojumbo
+      - generic [ref=e181]:
+        - img "Mumbo Jumbo" [ref=e182]
+        - generic [ref=e183]: Mumbo Jumbo
+      - img "Mumbo Jumbo minimap" [ref=e186]
+    - link "impulseSV impulseSV impulseSV minimap" [ref=e187] [cursor=pointer]:
+      - /url: /impulsesv
+      - generic [ref=e188]:
+        - img "impulseSV" [ref=e189]
+        - generic [ref=e190]: impulseSV
+      - img "impulseSV minimap" [ref=e193]
+    - link "BroCodez BroCodez BroCodez minimap" [ref=e194] [cursor=pointer]:
+      - /url: /brocodez
+      - generic [ref=e195]:
+        - img "BroCodez" [ref=e196]
+        - generic [ref=e197]: BroCodez
+      - img "BroCodez minimap" [ref=e200]
+    - link "Feinberg Feinberg Feinberg minimap" [ref=e201] [cursor=pointer]:
+      - /url: /feinberg
+      - generic [ref=e202]:
+        - img "Feinberg" [ref=e203]
+        - generic [ref=e204]: Feinberg
+      - img "Feinberg minimap" [ref=e207]
+    - link "Baablu Baablu Baablu minimap" [ref=e208] [cursor=pointer]:
+      - /url: /baablu
+      - generic [ref=e209]:
+        - img "Baablu" [ref=e210]
+        - generic [ref=e211]: Baablu
+      - img "Baablu minimap" [ref=e214]
+    - link "MadrasSamayal MadrasSamayal MadrasSamayal minimap" [ref=e215] [cursor=pointer]:
+      - /url: /madrassamayal
+      - generic [ref=e216]:
+        - img "MadrasSamayal" [ref=e217]
+        - generic [ref=e218]: MadrasSamayal
+      - img "MadrasSamayal minimap" [ref=e221]
+    - link "Dream Dream Dream minimap" [ref=e222] [cursor=pointer]:
+      - /url: /dream
+      - generic [ref=e223]:
+        - img "Dream" [ref=e224]
+        - generic [ref=e225]: Dream
+      - img "Dream minimap" [ref=e228]
+    - link "CarryMinati CarryMinati CarryMinati minimap" [ref=e229] [cursor=pointer]:
+      - /url: /carryminati
+      - generic [ref=e230]:
+        - img "CarryMinati" [ref=e231]
+        - generic [ref=e232]: CarryMinati
+      - img "CarryMinati minimap" [ref=e235]
+    - link "Tamil Gaming Tamil Gaming Tamil Gaming minimap" [ref=e236] [cursor=pointer]:
+      - /url: /tamilgaming
+      - generic [ref=e237]:
+        - img "Tamil Gaming" [ref=e238]
+        - generic [ref=e239]: Tamil Gaming
+      - img "Tamil Gaming minimap" [ref=e242]
+    - link "A2D Channel A2D Channel A2D Channel minimap" [ref=e243] [cursor=pointer]:
+      - /url: /a2d
+      - generic [ref=e244]:
+        - img "A2D Channel" [ref=e245]
+        - generic [ref=e246]: A2D Channel
+      - img "A2D Channel minimap" [ref=e249]
+    - link "New Reaper Gaming Reaper Gaming Reaper Gaming minimap" [ref=e250] [cursor=pointer]:
+      - /url: /reaper-gaming
+      - generic [ref=e251]:
+        - generic [ref=e252]: New
+        - img "Reaper Gaming" [ref=e253]
+        - generic [ref=e254]: Reaper Gaming
+      - img "Reaper Gaming minimap" [ref=e257]
+    - link "New Mr IG Mr IG Mr IG minimap" [ref=e258] [cursor=pointer]:
+      - /url: /mr-ig
+      - generic [ref=e259]:
+        - generic [ref=e260]: New
+        - img "Mr IG" [ref=e261]
+        - generic [ref=e262]: Mr IG
+      - img "Mr IG minimap" [ref=e265]
+    - link "New Thanjai Gaming Thanjai Gaming Thanjai Gaming minimap" [ref=e266] [cursor=pointer]:
+      - /url: /thanjai-gaming
+      - generic [ref=e267]:
+        - generic [ref=e268]: New
+        - img "Thanjai Gaming" [ref=e269]
+        - generic [ref=e270]: Thanjai Gaming
+      - img "Thanjai Gaming minimap" [ref=e273]
+    - link "Bumble Babu Bumble Babu Bumble Babu minimap" [ref=e274] [cursor=pointer]:
+      - /url: /bumblebabu
+      - generic [ref=e275]:
+        - img "Bumble Babu" [ref=e276]
+        - generic [ref=e277]: Bumble Babu
+      - img "Bumble Babu minimap" [ref=e280]
+    - link "Monitrix Monitrix Monitrix minimap" [ref=e281] [cursor=pointer]:
+      - /url: /monitrix
+      - generic [ref=e282]:
+        - img "Monitrix" [ref=e283]
+        - generic [ref=e284]: Monitrix
+      - img "Monitrix minimap" [ref=e287]
+    - link "Sharp Tamil Gaming Sharp Tamil Gaming Sharp Tamil Gaming minimap" [ref=e288] [cursor=pointer]:
+      - /url: /sharp-tamil-gaming
+      - generic [ref=e289]:
+        - img "Sharp Tamil Gaming" [ref=e290]
+        - generic [ref=e291]: Sharp Tamil Gaming
+      - img "Sharp Tamil Gaming minimap" [ref=e294]
+    - link "Tamil Tech Tamil Tech Tamil Tech minimap" [ref=e295] [cursor=pointer]:
+      - /url: /tamil-tech
+      - generic [ref=e296]:
+        - img "Tamil Tech" [ref=e297]
+        - generic [ref=e298]: Tamil Tech
+      - img "Tamil Tech minimap" [ref=e301]
+    - link "Madan Gowri Madan Gowri Madan Gowri minimap" [ref=e302] [cursor=pointer]:
+      - /url: /madan-gowri
+      - generic [ref=e303]:
+        - img "Madan Gowri" [ref=e304]
+        - generic [ref=e305]: Madan Gowri
+      - img "Madan Gowri minimap" [ref=e308]
+    - link "Mokka Commentary Mokka Commentary Mokka Commentary minimap" [ref=e309] [cursor=pointer]:
+      - /url: /mokkacommentry
+      - generic [ref=e310]:
+        - img "Mokka Commentary" [ref=e311]
+        - generic [ref=e312]: Mokka Commentary
+      - img "Mokka Commentary minimap" [ref=e315]
+    - link "Manguni Gamer Manguni Gamer Manguni Gamer minimap" [ref=e316] [cursor=pointer]:
+      - /url: /manguni
+      - generic [ref=e317]:
+        - img "Manguni Gamer" [ref=e318]
+        - generic [ref=e319]: Manguni Gamer
+      - img "Manguni Gamer minimap" [ref=e322]
+    - link "VJ Siddhu VJ Siddhu VJ Siddhu minimap" [ref=e323] [cursor=pointer]:
+      - /url: /vjsiddhu
+      - generic [ref=e324]:
+        - img "VJ Siddhu" [ref=e325]
+        - generic [ref=e326]: VJ Siddhu
+      - img "VJ Siddhu minimap" [ref=e329]
+    - link "JK JK JK minimap" [ref=e330] [cursor=pointer]:
+      - /url: /jk
+      - generic [ref=e331]:
+        - img "JK" [ref=e332]
+        - generic [ref=e333]: JK
+      - img "JK minimap" [ref=e336]
+    - link "Micset Micset Micset minimap" [ref=e337] [cursor=pointer]:
+      - /url: /micset
+      - generic [ref=e338]:
+        - img "Micset" [ref=e339]
+        - generic [ref=e340]: Micset
+      - img "Micset minimap" [ref=e343]
+    - link "Vinay Vines Vinay Vines Vinay Vines minimap" [ref=e344] [cursor=pointer]:
+      - /url: /vinay-vines
+      - generic [ref=e345]:
+        - img "Vinay Vines" [ref=e346]
+        - generic [ref=e347]: Vinay Vines
+      - img "Vinay Vines minimap" [ref=e350]
+    - link "Nakkalites Nakkalites Nakkalites minimap" [ref=e351] [cursor=pointer]:
+      - /url: /nakkalites
+      - generic [ref=e352]:
+        - img "Nakkalites" [ref=e353]
+        - generic [ref=e354]: Nakkalites
+      - img "Nakkalites minimap" [ref=e357]
+    - link "Parithabangal Parithabangal Parithabangal minimap" [ref=e358] [cursor=pointer]:
+      - /url: /parithabangal
+      - generic [ref=e359]:
+        - img "Parithabangal" [ref=e360]
+        - generic [ref=e361]: Parithabangal
+      - img "Parithabangal minimap" [ref=e364]
+    - link "Twin Throttlers Twin Throttlers Twin Throttlers minimap" [ref=e365] [cursor=pointer]:
+      - /url: /ttf
+      - generic [ref=e366]:
+        - img "Twin Throttlers" [ref=e367]
+        - generic [ref=e368]: Twin Throttlers
+      - img "Twin Throttlers minimap" [ref=e371]
+    - link "YeahTubeSathyeah YeahTubeSathyeah YeahTubeSathyeah minimap" [ref=e372] [cursor=pointer]:
+      - /url: /yeahtubesathyeah
+      - generic [ref=e373]:
+        - img "YeahTubeSathyeah" [ref=e374]
+        - generic [ref=e375]: YeahTubeSathyeah
+      - img "YeahTubeSathyeah minimap" [ref=e378]
+    - link "Tamil Ultimate Gaming Tamil Ultimate Gaming Tamil Ultimate Gaming minimap" [ref=e379] [cursor=pointer]:
+      - /url: /tamil-ultimate-gaming
+      - generic [ref=e380]:
+        - img "Tamil Ultimate Gaming" [ref=e381]
+        - generic [ref=e382]: Tamil Ultimate Gaming
+      - img "Tamil Ultimate Gaming minimap" [ref=e385]

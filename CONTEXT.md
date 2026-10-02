@@ -64,6 +64,7 @@ S:\Project\Python\venv\Lib\site-packages\New folder\PersonalFlix\
             ├── mod.rs      # router() nests every module under its own prefix
             ├── scenes.rs / performers.rs / categories.rs / studios.rs
             ├── comments.rs / timestamps.rs / tracking.rs / favorites.rs
+            ├── faces.rs (uniface sidecar: smart thumbnails) / transcribe.rs
             ├── playlists.rs / search.rs / video.rs / library.rs
 ```
 
@@ -151,7 +152,7 @@ textPrimary  #FFFFFF   textSecondary #A1A1AA   textMuted #52525B
 | Method & path | Purpose |
 |---|---|
 | GET `/api/health` | `{"ok":true}` |
-| GET/POST `/api/scenes` | list (filters: `studio`, `performer`, `category`, `search`, `file` [matches file_name OR original_name], `status`, `page`, `limit`) / create |
+| GET/POST `/api/scenes` | list (filters: `studio`, `performer`, `category`, `search`, `file` [matches file_name OR original_name], `status`, `fav` [=1 favorites-only], `sort` [incl. `fav_first`], `page`, `limit`) / create |
 | GET `/api/scenes/random` | random scene |
 | GET `/api/scenes/missing` | scenes missing performers/thumbnail (`?type=performers\|thumbnail`) |
 | GET `/api/scenes/{id}` | **wrapped detail**: `{scene, studio, performers, categories, timestamps, comments, tracking}` |
@@ -166,10 +167,11 @@ textPrimary  #FFFFFF   textSecondary #A1A1AA   textMuted #52525B
 | GET `/api/timestamps/{chapterId}/thumbnail` | chapter thumbnail JPEG (frame from chapter midpoint, or start+2s; ffmpeg-rendered, cached in `chapter_thumbs/`, swept on edit/delete) |
 | GET `/api/tracking` · GET `/api/tracking/continue-watching` | tracking list (embeds `scene`) / continue watching |
 | PUT `/api/tracking/{sceneId}` · DELETE `/api/tracking/{sceneId}` | set status/notes/rating · clear |
+| GET `/api/faces/status` · POST `/api/faces/thumb-smart` | face sidecar: engine availability / face-aware thumbnail for `{scene_id}` (venv+weights under `%LOCALAPPDATA%\PersonalFlix\tools\face`, setup via `scripts/face_thumbs/setup.ps1`) |
 | PUT `/api/tracking/{sceneId}/progress` | save `currentTime` (played position) |
 | GET/POST `/api/favorites` · GET `/api/favorites/{type}` · DELETE `/api/favorites/{type}/{targetId}` | favorites (type: `performer`\|`studio`) |
 | GET/POST `/api/playlists` · GET/PUT/DELETE `/api/playlists/{id}` · POST `/api/playlists/{id}/scenes` · DELETE `/api/playlists/{id}/scenes/{sceneId}` | playlists (GET {id} embeds `scenes`) |
-| GET `/api/search?q&page&limit` | global search; free text **and** `studio:` `performer:` `category:` `tag:` `resolution:` `status:` field tokens (AND-combined via intersection) |
+| GET `/api/search?q&page&limit` (+`fav=1`) | global search; free text **and** `studio:` `performer:` `category:` `tag:` `resolution:` `status:` `fav:` field tokens (AND-combined via intersection) |
 | GET `/api/video/{id}` | video streaming with HTTP range (206 Partial Content) |
 | GET `/api/pending-open` | drains single-instance `open-file` payload → `{"file": path \| null}` (boot-time race fix) |
 | GET `/api/library/stats` | `{filesOnDisk, filesMissing, scenes, bytes, lastScan}` |

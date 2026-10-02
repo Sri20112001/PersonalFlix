@@ -1,37 +1,153 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatTime, formatTotalDuration } from "../../utilities/formatters";
+import { performerImage } from "../../utilities/media";
 import Spinner from "../../components/Spinner";
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { ROUTES } from "../../constants/routes";
 
-function Bars({ rows, valueKey = "count", suffix = "", labelKey }) {
+function RowThumb({ src, name, shape = "circle" }) {
+  const [failed, setFailed] = useState(false);
+  const cls =
+    shape === "circle" ? "w-7 h-7 rounded-full object-cover object-top" : "w-7 h-7 rounded-md object-cover";
+  if (!src || failed) {
+    return (
+      <span
+        className={`w-7 h-7 flex-shrink-0 flex items-center justify-center font-display text-sm text-accent bg-accent/10 border border-accent/20 ${
+          shape === "circle" ? "rounded-full" : "rounded-md"
+        }`}
+      >
+        {(name || "?")[0].toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={`${cls} flex-shrink-0 bg-black/40 border border-white/10`}
+    />
+  );
+}
+
+function Bars({ rows, valueKey = "count", suffix = "", labelKey, imageOf, imageShape, linkOf }) {
   const max = Math.max(1, ...rows.map((r) => r[valueKey] || 0));
   return (
     <div className="flex flex-col gap-2">
-      {rows.map((r, i) => (
-        <div key={r.name || r.week || r.day || r.title || i} className="flex items-center gap-3">
-          <span className="w-36 flex-shrink-0 text-xs text-white truncate text-right">
-            {labelKey ? r[labelKey] : r.name || r.week || r.day?.slice(5) || r.title}
-          </span>
-          <div className="flex-1 h-2.5 bg-black/50 rounded overflow-hidden">
-            <div
-              className="h-full bg-accent rounded"
-              style={{ width: `${((r[valueKey] || 0) / max) * 100}%` }}
-            />
+      {rows.map((r, i) => {
+        const label = labelKey ? r[labelKey] : r.name || r.week || r.day?.slice(5) || r.title;
+        const to = linkOf ? linkOf(r) : null;
+        const row = (
+          <>
+            {imageOf && <RowThumb src={imageOf(r)} name={label} shape={imageShape} />}
+            <span className="w-36 flex-shrink-0 text-xs text-white truncate text-right group-hover:text-accent transition-colors">
+              {label}
+            </span>
+            <div className="flex-1 h-2.5 bg-black/50 rounded overflow-hidden">
+              <div
+                className="h-full bg-accent rounded"
+                style={{ width: `${((r[valueKey] || 0) / max) * 100}%` }}
+              />
+            </div>
+            <span className="w-16 flex-shrink-0 text-[11px] font-mono text-textSecondary">
+              {valueKey === "seconds" ? formatTime(r[valueKey] || 0) : `${r[valueKey] || 0}${suffix}`}
+            </span>
+          </>
+        );
+        return to ? (
+          <Link key={r.id || r.name || r.week || r.day || r.title || i} to={to} className="flex items-center gap-3 group">
+            {row}
+          </Link>
+        ) : (
+          <div key={r.name || r.week || r.day || r.title || i} className="flex items-center gap-3">
+            {row}
           </div>
-          <span className="w-16 flex-shrink-0 text-[11px] font-mono text-textSecondary">
-            {valueKey === "seconds" ? formatTime(r[valueKey] || 0) : `${r[valueKey] || 0}${suffix}`}
-          </span>
-        </div>
-      ))}
+        );
+      })}
       {rows.length === 0 && <div className="text-xs text-textMuted">Not enough data yet.</div>}
     </div>
   );
 }
 
+function Heatmap({ days }) {
+  if (!days || days.length === 0) {
+    return <div className="text-xs text-textMuted">Not enough data yet.</div>;
+  }
+  const max = Math.max(1, ...days.map((d) => d.seconds || 0));
+  // Columns = weeks (Monday-first); pad the first column to align weekdays.
+  const firstDow = (new Date(`${days[0].day}T12:00:00`).getDay() + 6) % 7;
+  const cells = [
+    ...Array(firstDow).fill(null),
+    ...days.map((d) => ({ ...d, dow: (new Date(`${d.day}T12:00:00`).getDay() + 6) % 7 })),
+  ];
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const level = (s) => {
+    if (!s || s <= 0) return "bg-white/5";
+    const r = s / max;
+    if (r < 0.25) return "bg-accent/25";
+    if (r < 0.5) return "bg-accent/50";
+    if (r < 0.75) return "bg-accent/75";
+    return "bg-accent";
+  };
+  // Streaks over active days (any watch time).
+  const active = days.map((d) => (d.seconds || 0) > 0);
+  let longest = 0, run = 0;
+  for (const a of active) {
+    run = a ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  let current = 0;
+  const tail = [...active];
+  if (!tail[tail.length - 1]) tail.pop(); // today not over yet — don't break the streak
+  while (tail.length && tail[tail.length - 1]) {
+    current++;
+    tail.pop();
+  }
+  return (
+    <div>
+      <div className="flex gap-1 overflow-x-auto pb-1">
+        {weeks.map((w, wi) => (
+          <div key={wi} className="flex flex-col gap-1 flex-shrink-0">
+            {Array.from({ length: 7 }).map((_, di) => {
+              const c = w[di];
+              if (!c) return <span key={di} className="w-3 h-3" />;
+              return (
+                <span
+                  key={di}
+                  title={`${c.day} · ${formatTime(c.seconds || 0)}`}
+                  className={`w-3 h-3 rounded-[3px] ${level(c.seconds)}`}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center gap-1.5 text-[10px] text-textMuted">
+          <span>Less</span>
+          {["bg-white/5", "bg-accent/25", "bg-accent/50", "bg-accent/75", "bg-accent"].map((c) => (
+            <span key={c} className={`w-3 h-3 rounded-[3px] ${c}`} />
+          ))}
+          <span>More</span>
+        </div>
+        <div className="flex items-center gap-3 text-[11px] font-mono text-textSecondary">
+          <span>
+            <b className="text-accent">{current}d</b> streak
+          </span>
+          <span>
+            <b className="text-white">{longest}d</b> best
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
-  const { data, loading, cards, watchTime, watchTimeExact, hasExact, watchCards, daily, topScenes, ratingBuckets } =
+  const { data, loading, cards, watchTime, watchTimeExact, hasExact, watchCards, daily, heatmap, completion, topScenes, ratingBuckets } =
     useAnalytics();
 
   if (loading) {
@@ -90,6 +206,33 @@ export default function AnalyticsPage() {
               <div className="text-[10px] uppercase tracking-widest text-textSecondary mt-1">{label}</div>
             </div>
           ))}
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <div className="bg-surface rounded-lg p-5">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-1">
+              Activity · last 120 days
+            </h2>
+            <p className="text-[11px] text-textMuted mb-4">Darker gold = more watch time.</p>
+            <Heatmap days={heatmap} />
+          </div>
+          <div className="bg-surface rounded-lg p-5">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-textSecondary mb-1">
+              Completion
+            </h2>
+            <p className="text-[11px] text-textMuted mb-4">
+              {completion && completion.measured > 0 ? (
+                <>
+                  Avg <b className="text-accent">{completion.avgPct}%</b> watched across{" "}
+                  {completion.measured} measured scenes ·{" "}
+                  <b className="text-white">{completion.finished}</b> finished
+                </>
+              ) : (
+                "Play a scene to the end to measure completion."
+              )}
+            </p>
+            <Bars rows={(completion && completion.buckets) || []} labelKey="label" />
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-6">

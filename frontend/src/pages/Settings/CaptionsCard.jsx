@@ -20,12 +20,19 @@ export default function CaptionsCard({ settings, onSettings }) {
   const [engine, setEngine] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [movePath, setMovePath] = useState("");
+  const [moving, setMoving] = useState(false);
+
+  const refreshEngine = async () => {
+    try {
+      setEngine(await api.transcribeEngine());
+    } catch {
+      setEngine({ available: false });
+    }
+  };
 
   useEffect(() => {
-    api
-      .transcribeEngine()
-      .then(setEngine)
-      .catch(() => setEngine({ available: false }));
+    refreshEngine();
   }, []);
 
   const current = settings?.whisper_model || engine?.preference || "auto";
@@ -38,13 +45,44 @@ export default function CaptionsCard({ settings, onSettings }) {
     try {
       const updated = await api.updateSettings({ whisper_model: value });
       onSettings && onSettings(updated);
-      const st = await api.transcribeEngine();
-      setEngine(st);
-      setMsg(`Caption model set to ${value}. New transcriptions use ${st.model_name || value}.`);
+      await refreshEngine();
+      setMsg(`Caption model set to ${value}.`);
     } catch (e) {
       setMsg("Save failed: " + (e.message || String(e)));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const moveEngine = async () => {
+    const dest = movePath.trim();
+    if (!dest) {
+      setMsg("Enter a destination folder first (e.g. P:\\AI\\whisper).");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Move the whisper engine (exe + all models) to:\n\n${dest}\n\nThe app will use the new location immediately. Continue?`
+      )
+    )
+      return;
+    setMoving(true);
+    setMsg("");
+    try {
+      const res = await api.relocateEngine(dest);
+      if (res?.error || res?.ok === false) throw new Error(res?.error || "move failed");
+      const updated = await api.settings().catch(() => null);
+      if (updated) onSettings && onSettings(updated);
+      await refreshEngine();
+      setMovePath("");
+      setMsg(`Engine moved to ${res.root || dest} (${res.moved ?? 0} items).`);
+    } catch (e) {
+      const detail = String(e?.message || e).startsWith("409")
+        ? "A transcription is running — wait for it to finish and retry."
+        : e.message || String(e);
+      setMsg("Move failed: " + detail);
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -64,17 +102,47 @@ export default function CaptionsCard({ settings, onSettings }) {
         )}
       </div>
 
-      <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
+      <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
         Local Whisper.cpp transcribes dialogue into sidecar captions. Larger
         models miss far fewer lines — if transcripts skip dialogue, switch to a
         larger model and re-generate the captions.
       </p>
 
+      {/* Engine location: move the multi-GB exe + models off the system drive */}
+      <div className="mb-5 rounded-xl bg-white/[0.03] border border-white/10 p-3.5">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">
+          Engine location
+        </div>
+        <div className="text-[11px] font-mono text-zinc-300 break-all mb-2.5">
+          {engine?.root || settings?.whisper_root || "…"}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={movePath}
+            onChange={(e) => setMovePath(e.target.value)}
+            placeholder="New folder, e.g. P:\AI\whisper"
+            className="flex-1 min-w-0 bg-zinc-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder:text-zinc-600 outline-none focus:border-accent transition-colors"
+          />
+          <button
+            onClick={moveEngine}
+            disabled={moving}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider text-zinc-950 bg-accent hover:brightness-110 transition-all cursor-pointer disabled:opacity-50 active:scale-95 flex-shrink-0"
+            title="Move whisper-cli.exe and all models to the new folder"
+          >
+            {moving ? "Moving…" : "Move"}
+          </button>
+        </div>
+        <div className="mt-1.5 text-[10px] font-mono text-zinc-600">
+          Moves the exe + models, then uses the new location. Blocked while a transcription runs.
+        </div>
+      </div>
+
       {!engine ? (
         <div className="text-xs font-mono text-zinc-500">Checking engine…</div>
       ) : !engine.available ? (
         <div className="text-xs font-mono text-amber-300">
-          Whisper engine not found under %LOCALAPPDATA%/PersonalFlix/tools/whisper.
+          Whisper engine not found in the folder above. Move a staged install
+          there, or reinstall it.
         </div>
       ) : (
         <>

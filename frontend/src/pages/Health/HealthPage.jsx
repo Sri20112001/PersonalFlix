@@ -3,6 +3,7 @@ import { api } from "../../api/apiClient";
 import { fmtBytes, findDuplicates } from "./healthUtils";
 import FetchUrlSection from "./FetchUrlSection";
 import BackfillSection from "./BackfillSection";
+import FaceThumbsSection from "./FaceThumbsSection";
 import DuplicatesTab from "./DuplicatesTab";
 import AuditTab from "./AuditTab";
 
@@ -355,6 +356,12 @@ export default function Health() {
           setBackfillFilenames={setBackfillFilenames}
           onPreviewBackfill={previewBackfill}
           onApplyBackfill={applyBackfill}
+        />
+
+        {/* Face-aware thumbnails */}
+        <FaceThumbsSection
+          missingIds={stats?.thumbnailsMissingIds || []}
+          onChanged={load}
         />
 
         {/* Primary Health Tabs */}

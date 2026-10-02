@@ -48,6 +48,8 @@ export const api = {
   performers: (params = {}) =>
     req(`/api/performers?${new URLSearchParams(params).toString()}`),
   performer: (id) => req(`/api/performers/${id}`),
+  updatePerformer: (id, body) =>
+    req(`/api/performers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // studios / categories / graph
   studios: () => req("/api/studios"),
@@ -129,6 +131,14 @@ export const api = {
   // analytics
   analytics: () => req("/api/analytics/overview"),
 
+  // face-aware smart thumbnails (uniface sidecar)
+  facesStatus: () => req("/api/faces/status"),
+  smartThumb: (sceneId, force = false) =>
+    req("/api/faces/thumb-smart", {
+      method: "POST",
+      body: JSON.stringify({ scene_id: sceneId, force }),
+    }),
+
   // watch session log (exact watch time)
   logWatchEvent: (scene_id, event, currentTime, duration) =>
     req("/api/watch-events", {
@@ -139,11 +149,16 @@ export const api = {
   watchEvents: (sceneId) => req(`/api/watch-events?scene_id=${sceneId}`),
 
   // search
-  search: (q, page = 1, limit = 30) =>
-    req(`/api/search?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+  search: (q, page = 1, limit = 30, favOnly = false) =>
+    req(`/api/search?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}${favOnly ? "&fav=1" : ""}`),
 
   // whisper transcription (local whisper.cpp → sidecar .en.vtt)
   transcribeEngine: () => req("/api/transcribe/status"),
+  relocateEngine: (path) =>
+    req("/api/transcribe/relocate", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
   transcribeJob: (sceneId) => req(`/api/transcribe/${sceneId}`),
   transcribeScene: (sceneId, force = false) =>
     req(`/api/transcribe/${sceneId}`, {

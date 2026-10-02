@@ -16,6 +16,8 @@ fn to_json(s: &Settings) -> JValue {
         "keybindings": s.keybindings,
         "backup_mode": s.backup_mode(),
         "whisper_model": s.whisper_model_name(),
+        "whisper_dir": s.whisper_dir,
+        "whisper_root": Settings::whisper_root().to_string_lossy(),
     })
 }
 
@@ -50,8 +52,21 @@ async fn update_settings(Json(body): Json<JValue>) -> Result<Json<JValue>, Statu
             settings.whisper_model = Some(if token == "auto" { "auto".into() } else { v.into() });
         }
     }
-    if let Some(kb) = body.get("keybindings").and_then(|v| v.as_object()) {
-        let mut map = settings.keybindings.take().unwrap_or_default();
+    if let Some(v) = body.get("whisper_dir") {
+        // Absolute path = custom engine home; empty/null = back to default.
+        // (Prefer POST /api/transcribe/relocate: it moves the files too.)
+        if v.is_null() {
+            settings.whisper_dir = None;
+        } else if let Some(s) = v.as_str() {
+            let s = s.trim();
+            if s.is_empty() {
+                settings.whisper_dir = None;
+            } else if std::path::Path::new(s).is_absolute() {
+                settings.whisper_dir = Some(s.to_string());
+            }
+        }
+    }
+    if let Some(kb) = body.get("keybindings").and_then(|v| v.as_object()) {        let mut map = settings.keybindings.take().unwrap_or_default();
         for (k, v) in kb {
             if let Some(val) = v.as_str() {
                 map.insert(k.clone(), val.to_string());

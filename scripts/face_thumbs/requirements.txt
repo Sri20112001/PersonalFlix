@@ -1,0 +1,5 @@
+# Face sidecar deps (CPU). Installed into %LOCALAPPDATA%\PersonalFlix\tools\face\venv
+# by setup.ps1 — never into the repo, never into the user's main python.
+uniface[cpu]
+opencv-python-headless
+numpy

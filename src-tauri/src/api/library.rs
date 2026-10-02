@@ -1,4 +1,5 @@
 use crate::api::download;
+use crate::api::integrity;
 use crate::api::reconcile;
 use crate::api::resolve_video_path;
 use crate::scanner;
@@ -15,6 +16,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/stats", get(stats))
         .route("/mapping-audit", get(mapping_audit))
+        .route("/integrity", get(verify_database))
         .route("/scan", post(scan))
         .route("/review-queue", get(review_queue))
         .route("/reconcile", post(reconcile_library))
@@ -30,6 +32,12 @@ async fn stats(State(state): State<AppState>) -> axum::Json<Value> {
 
 async fn scan(State(state): State<AppState>) -> axum::Json<Value> {
     axum::Json(serde_json::to_value(scanner::scan_library(&state.db, &state.library_path)).unwrap_or_else(|_| json!({})))
+}
+
+/// Structural integrity verification (read-only): SQLite integrity,
+/// JSON validity, dangling references, duplicates, missing files.
+async fn verify_database(State(state): State<AppState>) -> axum::Json<Value> {
+    axum::Json(integrity::verify(&state.db))
 }
 
 /// Phase-0 read-only mapping audit (performer ↔ scene ↔ studio).

@@ -39,7 +39,7 @@ async fn search(
             if matches!(
                 field.as_str(),
                 "studio" | "performer" | "category" | "tag" | "resolution" | "status"
-                    | "before" | "after" | "rating" | "duration"
+                    | "before" | "after" | "rating" | "duration" | "fav" | "favorite"
             ) {
                 let value = unquote(value.trim());
                 if !value.is_empty() {
@@ -256,6 +256,14 @@ async fn search(
                     ids.push(r);
                 }
             }
+            // Scene-level favorites: fav:yes / fav:1 (falsy values skip the filter).
+            "fav" | "favorite" => {
+                if matches!(value.to_lowercase().as_str(), "1" | "true" | "yes" | "only" | "fav" | "favorites") {
+                    ids = crate::api::favorites::favorite_scene_ids(&conn);
+                } else {
+                    continue;
+                }
+            }
             "before" => {
                 // Scene date (ISO-ish string) strictly earlier than the value.
                 // Prefixes work: before:2025, before:2025-06.
@@ -329,6 +337,12 @@ async fn search(
             _ => {}
         }
         intersect(&conn, ids);
+    }
+
+    // `?fav=1` restricts any search (with or without query text) to
+    // favorited scenes. Runs after field tokens so it intersects them.
+    if crate::api::favorites::fav_requested(&query) {
+        intersect(&conn, crate::api::favorites::favorite_scene_ids(&conn));
     }
 
     let mut ids: Vec<i64> = candidate.unwrap_or_default().into_iter().collect();

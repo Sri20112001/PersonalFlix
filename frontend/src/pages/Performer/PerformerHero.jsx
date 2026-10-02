@@ -13,6 +13,7 @@ export default function PerformerHero({
   onToggleFavorite,
   onPlayRandom,
   onBack,
+  onEdit,
 }) {
   if (!performer) return null;
 
@@ -155,6 +156,18 @@ export default function PerformerHero({
                 <span>Play Random</span>
               </button>
             )}
+
+            {/* Edit Info Button */}
+            <button
+              onClick={onEdit}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-semibold uppercase tracking-wider bg-white/[0.04] hover:bg-white/[0.08] text-zinc-200 hover:text-white border border-white/10 hover:border-white/20 transition-all cursor-pointer active:scale-95 shadow-sm"
+              title="Edit performer info"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
+              <span>Edit</span>
+            </button>
           </div>
 
           {/* Quick Statistics Strip */}

@@ -18,14 +18,15 @@ export default function SceneListItem({
   const hasProgress = effectiveStatus === "watching" || (effectiveProg || 0) > 0;
 
   let listStatusClasses = "border-white/[0.08]";
-  if (effectiveStatus === "skip") {
+  if (isFav) {
+    listStatusClasses =
+      "border-amber-300/40 bg-amber-300/[0.04] shadow-sm shadow-amber-300/10";
+  } else if (effectiveStatus === "skip") {
     listStatusClasses = "opacity-60 hover:opacity-100 grayscale-[40%] hover:grayscale-0 border-zinc-800/80";
   } else if (effectiveStatus === "watching") {
     listStatusClasses = "border-accent/40 shadow-sm shadow-accent/5";
   } else if (effectiveStatus === "watched") {
     listStatusClasses = "border-emerald-500/20";
-  } else if (isFav) {
-    listStatusClasses = "border-rose-500/25";
   }
 
   return (
@@ -82,7 +83,9 @@ export default function SceneListItem({
         )}
 
         {/* Native Lightweight Thumbnail */}
-        <div className="relative w-60 aspect-video flex-shrink-0 rounded-xl overflow-hidden bg-zinc-900 border border-white/10 shadow-md group/thumb">
+        <div className={`relative w-60 aspect-video flex-shrink-0 rounded-xl overflow-hidden bg-zinc-900 border shadow-md group/thumb ${
+          isFav ? "border-amber-300/50 shadow-amber-300/20" : "border-white/10"
+        }`}>
           <img
             src={thumbUrl(scene._id)}
             alt=""
@@ -126,11 +129,11 @@ export default function SceneListItem({
 
             <div className="flex items-center gap-1 flex-wrap justify-end">
               {isFav && (
-                <span className="bg-rose-950/90 text-rose-300 border border-rose-500/40 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="text-rose-400">
+                <span className="bg-amber-300 text-zinc-950 border border-amber-100/70 text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(245,179,1,0.5)] uppercase tracking-wider">
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                   </svg>
-                  <span>Fav</span>
+                  <span>★ Fav</span>
                 </span>
               )}
               {effectiveStatus === "skip" && (

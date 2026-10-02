@@ -47,6 +47,8 @@ export function useAnalytics() {
     hasExact,
     watchCards,
     daily: data?.daily || [],
+    heatmap: data?.heatmap || [],
+    completion: data?.completion || null,
     topScenes: data?.topScenes || [],
     ratingBuckets: data?.ratingBuckets || [],
   };

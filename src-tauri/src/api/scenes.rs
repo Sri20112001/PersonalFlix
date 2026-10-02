@@ -139,6 +139,13 @@ fn build_filter(query: &HashMap<String, String>) -> (String, Vec<Value>) {
         where_clauses.push("resolution LIKE ? COLLATE NOCASE".into());
         params.push(format!("%{}%", res).into());
     }
+    if crate::api::favorites::fav_requested(query) {
+        // Scene-level favorites (target_id stores the numeric scene id as TEXT).
+        where_clauses.push(
+            "EXISTS (SELECT 1 FROM favorites f WHERE f.type = 'scene' AND f.target_id = CAST(scenes.id AS TEXT))"
+                .into(),
+        );
+    }
 
     let where_sql = if where_clauses.is_empty() {
         String::new()
@@ -163,6 +170,23 @@ fn fetch_scenes(conn: &Connection, where_sql: &str, params: &[Value], limit: i64
     rows.filter_map(|r| r.ok()).collect()
 }
 
+/// ORDER BY clause for `GET /api/scenes?sort=`. Extracted (not inline in
+/// `list`) so the mapping stays unit-testable.
+fn sort_order(sort_param: &str) -> &'static str {
+    match sort_param {
+        "mtime" => "mtime DESC, id DESC",
+        "title_asc" | "title" => "LOWER(COALESCE(NULLIF(title, ''), file_name)) ASC, id DESC",
+        "title_desc" => "LOWER(COALESCE(NULLIF(title, ''), file_name)) DESC, id DESC",
+        "date_desc" | "date" => "CASE WHEN date IS NOT NULL AND date != '' THEN date ELSE '0000-00-00' END DESC, id DESC",
+        "date_asc" => "CASE WHEN date IS NOT NULL AND date != '' THEN date ELSE '9999-99-99' END ASC, id ASC",
+        "size_desc" | "size" => "size_bytes DESC, id DESC",
+        "random" => "RANDOM()",
+        // Favorites first (still newest-first within each group).
+        "fav_first" | "fav" | "favorites" => "EXISTS (SELECT 1 FROM favorites f WHERE f.type = 'scene' AND f.target_id = CAST(scenes.id AS TEXT)) DESC, id DESC",
+        _ => "id DESC",
+    }
+}
+
 async fn list(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
@@ -182,16 +206,7 @@ async fn list(
             .unwrap_or(0)
     };
     let sort_param = query.get("sort").map(|s| s.as_str()).unwrap_or("recent");
-    let order = match sort_param {
-        "mtime" => "mtime DESC, id DESC",
-        "title_asc" | "title" => "LOWER(COALESCE(NULLIF(title, ''), file_name)) ASC, id DESC",
-        "title_desc" => "LOWER(COALESCE(NULLIF(title, ''), file_name)) DESC, id DESC",
-        "date_desc" | "date" => "CASE WHEN date IS NOT NULL AND date != '' THEN date ELSE '0000-00-00' END DESC, id DESC",
-        "date_asc" => "CASE WHEN date IS NOT NULL AND date != '' THEN date ELSE '9999-99-99' END ASC, id ASC",
-        "size_desc" | "size" => "size_bytes DESC, id DESC",
-        "random" => "RANDOM()",
-        _ => "id DESC",
-    };
+    let order = sort_order(sort_param);
     let scenes = fetch_scenes(&conn, &where_sql, &params, limit, (page - 1) * limit, order);
     let total_pages = if limit > 0 { (total as f64 / limit as f64).ceil() as i64 } else { 0 };
     Json(json!({ "scenes": scenes, "total": total, "page": page, "totalPages": total_pages }))
@@ -554,6 +569,52 @@ mod tests {
         assert_eq!(sim.len(), 2);
         assert!(sim[0]["score"].as_f64().unwrap() > sim[1]["score"].as_f64().unwrap());
         assert!(sim[0]["match_percentage"].as_i64().unwrap() >= sim[1]["match_percentage"].as_i64().unwrap());
+    }
+
+    #[test]
+    fn fav_filter_and_fav_first_sort() {
+        let db = open_memory();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO scenes(id,file_name,title) VALUES(1,'a.mp4','A'),(2,'b.mp4','B'),(3,'c.mp4','C')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO favorites(type,target_id,created_at) VALUES('scene','2','x'),('scene','3','x'),('performer','p1','x')",
+                [],
+            )
+            .unwrap();
+        }
+        assert!(crate::api::favorites::fav_requested(&HashMap::from([
+            ("fav".to_string(), "yes".to_string())
+        ])));
+        assert!(!crate::api::favorites::fav_requested(&HashMap::from([
+            ("fav".to_string(), "no".to_string())
+        ])));
+        assert!(!crate::api::favorites::fav_requested(&HashMap::new()));
+
+        // ?fav=1 narrows to favorited scenes only (performer favs ignored).
+        let mut q = HashMap::new();
+        q.insert("fav".to_string(), "1".to_string());
+        let (where_sql, params) = build_filter(&q);
+        let conn = db.lock().unwrap();
+        let scenes = fetch_scenes(&conn, &where_sql, &params, 50, 0, "id DESC");
+        let ids: Vec<i64> = scenes.iter().filter_map(|s| s["_id"].as_i64()).collect();
+        assert_eq!(ids, vec![3, 2]);
+
+        // sort=fav_first floats favorites above the rest, newest-first inside.
+        let scenes = fetch_scenes(&conn, "", &[], 50, 0, sort_order("fav_first"));
+        let ids: Vec<i64> = scenes.iter().filter_map(|s| s["_id"].as_i64()).collect();
+        assert_eq!(ids, vec![3, 2, 1]);
+
+        // Pre-existing sorts are untouched.
+        assert_eq!(sort_order("recent"), "id DESC");
+        assert_eq!(
+            sort_order("title_asc"),
+            "LOWER(COALESCE(NULLIF(title, ''), file_name)) ASC, id DESC"
+        );
     }
 }
 

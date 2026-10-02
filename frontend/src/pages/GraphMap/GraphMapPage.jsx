@@ -1,619 +1,902 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { forceSimulation, forceLink, forceManyBody, forceCollide } from "d3-force";
 import { api } from "../../api/apiClient";
-import { performerImage } from "../../utilities/media";
+import { thumbUrl } from "../../utilities/media";
 import Spinner from "../../components/Spinner";
-import GraphToolbar from "./GraphToolbar";
+import YtMapBar from "./GraphToolbar";
 import GraphInspector from "./GraphInspector";
 import "./graph-uiverse.css";
 
-// Image cache for canvas rendering
+// ---------------------------------------------------------------------------
+// ytmap.space-style scene map: every scene is a thumbnail tile clustered by
+// studio into organic "islands" on an infinite black canvas. Tiles are tiny
+// color dots from far away and resolve into real thumbnails as you zoom in.
+// Bottom glass pill = home / search / random. Top-right card = counts +
+// hovered/selected preview. Click a tile for the full inspector.
+// ---------------------------------------------------------------------------
+
+const TILE = 12; // world-unit tile edge
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+// Thumbnail image cache (one Image per scene, lazy).
 const imageCache = new Map();
 function getCachedImage(url) {
   if (!url) return null;
   if (imageCache.has(url)) return imageCache.get(url);
   const img = new Image();
-  img.crossOrigin = "anonymous";
   img.src = url;
   imageCache.set(url, img);
   return img;
 }
 
-function forceRadialShell(getOrbitRadius) {
-  let nodes = [];
-
-  function force(alpha) {
-    for (const node of nodes) {
-      const targetR = getOrbitRadius(node);
-      if (targetR === 0) {
-        // Pull nucleus nodes strongly to origin (0, 0)
-        node.vx += -node.x * 0.15 * alpha;
-        node.vy += -node.y * 0.15 * alpha;
-        continue;
-      }
-
-      // Current distance from center
-      const currentR = Math.hypot(node.x, node.y) || 1;
-      const k = ((targetR - currentR) / currentR) * 0.12 * alpha;
-
-      node.vx += node.x * k;
-      node.vy += node.y * k;
-    }
+// Deterministic 0..1 hash for stable organic jitter.
+function hash01(str) {
+  let h = 2166136261;
+  const s = String(str);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
   }
-
-  force.initialize = (_nodes) => {
-    nodes = _nodes;
-  };
-
-  return force;
+  return ((h >>> 0) % 10000) / 10000;
 }
 
-const ORBIT_RADII = {
-  nucleus: 0,       // Center: Studios or active selection
-  shell1: 180,      // Inner orbit: Performers
-  shell2: 360,      // Outer orbit: Scenes / Co-stars
-};
+// Studio-clustered island layout: studios sorted big-first, centers on a
+// golden-angle spiral, scenes packed sunflower-style inside each island.
+function layoutTiles(scenes) {
+  const groups = new Map();
 
-const getOrbitRadius = (node) => {
-  if (node.type === "studio") return ORBIT_RADII.nucleus;
-  if (node.type === "performer") return ORBIT_RADII.shell1;
-  return ORBIT_RADII.shell2;
-};
+  for (const s of scenes) {
+    const key =
+      s.studio_id ||
+      s.studio ||
+      "__unknown__";
 
-// Static type-based shell key, used only for initial ring pre-placement.
-const orbitKey = (node) => {
-  if (node.type === "studio") return "nucleus";
-  if (node.type === "performer") return "shell1";
-  return "shell2";
-};
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
 
+    groups.get(key).push(s);
+  }
 
+  const ordered = [...groups.values()]
+    .sort((a, b) => b.length - a.length);
+
+  const tiles = [];
+
+  ordered.forEach((members, gi) => {
+    const baseRadius = 145;
+
+    const angle =
+      gi * GOLDEN_ANGLE +
+      hash01(`studio:${gi}`) * 0.45;
+
+    const distance =
+      baseRadius *
+      Math.sqrt(gi + 0.7);
+
+    const cx =
+      Math.cos(angle) *
+      distance;
+
+    const cy =
+      Math.sin(angle) *
+      distance *
+      0.78;
+
+    const islandR =
+      12 * Math.sqrt(members.length) +
+      22;
+
+    members.forEach((s, i) => {
+      const angleOffset =
+        hash01(`${s.id}:angle`) * 0.7;
+
+      const a =
+        i * GOLDEN_ANGLE +
+        angleOffset;
+
+      const radialNoise =
+        0.82 +
+        hash01(`${s.id}:radius`) * 0.36;
+
+      const rr =
+        Math.min(
+          10.5 * Math.sqrt(i + 0.5) * radialNoise,
+          islandR
+        );
+
+      const jitter =
+        4 +
+        Math.min(
+          10,
+          Math.sqrt(members.length)
+        );
+
+      const jx =
+        (hash01(`${s.id}:x`) - 0.5) *
+        jitter;
+
+      const jy =
+        (hash01(`${s.id}:y`) - 0.5) *
+        jitter;
+
+      const hue = Math.floor(
+        hash01(
+          s.studio_id ||
+          s.studio ||
+          s.id
+        ) * 360
+      );
+
+      tiles.push({
+        ...s,
+
+        x:
+          cx +
+          Math.cos(a) * rr +
+          jx,
+
+        y:
+          cy +
+          Math.sin(a) * rr +
+          jy,
+
+        hue,
+
+        thumb: thumbUrl(s.raw_id),
+      });
+    });
+  });
+
+  return tiles;
+}
 
 export default function GraphMap() {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
 
-  const [graphData, setGraphData] = useState(null);
+  const [tiles, setTiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [totalScenes, setTotalScenes] = useState(0);
 
-  // View & Filter States
-  const [mode, setMode] = useState("collab"); // "collab" (performers & studios) | "full" (includes scenes)
-  const [showStudios, setShowStudios] = useState(true);
-  const [showPerformers, setShowPerformers] = useState(true);
-  const [showScenes, setShowScenes] = useState(true);
-  const [minScenes, setMinScenes] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [hovered, setHovered] = useState(null);
+  const [selected, setSelected] = useState(null);
 
-  // Interaction States
-  const [selectedNode, setSelectedNode] = useState(null);
-  const [hoveredNode, setHoveredNode] = useState(null);
-  const [isPaused, setIsPaused] = useState(false);
-
-  // Transform (pan & zoom)
   const transformRef = useRef({ x: 0, y: 0, k: 0.8 });
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
-  const draggedNodeRef = useRef(null);
-  const simRef = useRef(null);
-  const animFrameRef = useRef(null);
-  // Last-known node positions, so filter/mode changes don't scatter the atom.
-  const posRef = useRef(new Map());
+  const movedRef = useRef(false);
+  const tilesRef = useRef([]);
+  const hoverRef = useRef(null);
+  const selectedRef = useRef(null);
+  const matchRef = useRef(new Set());
   const didFitRef = useRef(false);
 
-  // Fetch Graph Data
+  // -- data ---------------------------------------------------------------
   useEffect(() => {
     setLoading(true);
     api
       .graph()
       .then((data) => {
-        setGraphData(data);
+        const scenes = (data.nodes || []).filter((n) => n.type === "scene");
+        setTotalScenes(scenes.length);
+        const laid = layoutTiles(scenes);
+        tilesRef.current = laid;
+        setTiles(laid);
       })
       .catch((err) => console.error("Failed to load graph data", err))
       .finally(() => setLoading(false));
   }, []);
 
-  // Stable simulation nodes/links: rebuilt only on data/mode/filter changes,
-  // so hovering or selecting never restarts the physics or wipes positions.
-  const { activeNodes, activeLinks } = useMemo(() => {
-    if (!graphData) {
-      return { activeNodes: [], activeLinks: [] };
-    }
-
-    const rawNodes = graphData.nodes || [];
-    const rawLinks = mode === "full" ? graphData.links || [] : graphData.collab_links || [];
-
-    // Filter nodes
-    const filteredNodes = rawNodes.filter((n) => {
-      if (n.type === "studio" && !showStudios) return false;
-      if (n.type === "performer" && !showPerformers) return false;
-      if (n.type === "scene" && (mode !== "full" || !showScenes)) return false;
-      if (n.scene_count != null && n.scene_count < minScenes) return false;
-      return true;
-    });
-
-    const validIdSet = new Set(filteredNodes.map((n) => n.id));
-
-    // Group totals for uniform ring pre-placement (prevents link tangling).
-    const groupTotals = { nucleus: 0, shell1: 0, shell2: 0 };
-    for (const n of filteredNodes) groupTotals[orbitKey(n)] += 1;
-    const groupPlaced = { nucleus: 0, shell1: 0, shell2: 0 };
-
-    // Clone nodes for D3 simulation mutability
-    const simNodes = filteredNodes.map((n) => {
-      const cloned = { ...n };
-      // Assign initial radius based on type and importance
-      if (cloned.type === "studio") {
-        cloned.radius = Math.max(16, Math.min(36, 14 + Math.sqrt(cloned.scene_count || 1) * 2.5));
-        cloned.color = "#6366F1"; // Indigo hub
-      } else if (cloned.type === "performer") {
-        cloned.radius = Math.max(12, Math.min(28, 10 + Math.sqrt(cloned.scene_count || 1) * 2));
-        cloned.color = "#E5A919"; // Gold accent
-      } else {
-        cloned.radius = 5;
-        cloned.color = "#64748B"; // Slate scene dot
-      }
-      const cached = posRef.current.get(cloned.id);
-      if (cached) {
-        // Keep last-known position across filter/mode changes.
-        cloned.x = cached.x;
-        cloned.y = cached.y;
-      } else {
-        // Distribute uniformly along the target ring rather than randomly.
-        const key = orbitKey(n);
-        const targetR = ORBIT_RADII[key];
-        const idx = groupPlaced[key]++;
-        const total = Math.max(1, groupTotals[key]);
-        const angle = (idx / total) * Math.PI * 2;
-        const jitter = key === "nucleus" ? 30 : 20;
-        cloned.x = Math.cos(angle) * targetR + (Math.random() - 0.5) * jitter;
-        cloned.y = Math.sin(angle) * targetR + (Math.random() - 0.5) * jitter;
-      }
-      return cloned;
-    });
-
-    // Filter links
-    const simLinks = [];
-    for (const l of rawLinks) {
-      const sourceId = typeof l.source === "object" ? l.source.id : l.source;
-      const targetId = typeof l.target === "object" ? l.target.id : l.target;
-      if (validIdSet.has(sourceId) && validIdSet.has(targetId)) {
-        simLinks.push({
-          source: sourceId,
-          target: targetId,
-          type: l.type,
-          weight: l.weight || 1,
-        });
-      }
-    }
-
-    return { activeNodes: simNodes, activeLinks: simLinks };
-  }, [graphData, mode, showStudios, showPerformers, showScenes, minScenes]);
-
-  const nodeMap = useMemo(
-    () => new Map(activeNodes.map((n) => [n.id, n])),
-    [activeNodes]
-  );
-
-  // Neighbors of selected or hovered node for highlighting (cheap: no sim restart).
-  const neighborSet = useMemo(() => {
-    const nSet = new Set();
-    const activeFocusId = selectedNode?.id || hoveredNode?.id;
-    if (activeFocusId) {
-      nSet.add(activeFocusId);
-      for (const l of activeLinks) {
-        const sId = typeof l.source === "object" ? l.source.id : l.source;
-        const tId = typeof l.target === "object" ? l.target.id : l.target;
-        if (sId === activeFocusId) nSet.add(tId);
-        if (tId === activeFocusId) nSet.add(sId);
-      }
-    }
-    return nSet;
-  }, [selectedNode?.id, hoveredNode?.id, activeLinks]);
-
-  // BFS depth from the selected node for the dynamic focal atom:
-  // selected → nucleus, 1st-degree → shell1, 2nd-degree → shell2.
-  const depthMap = useMemo(() => {
-    const depths = new Map();
-    const selId = selectedNode?.id;
-    if (!selId) return depths;
-    const adj = new Map();
-    const addEdge = (a, b) => {
-      if (!adj.has(a)) adj.set(a, []);
-      adj.get(a).push(b);
-    };
-    for (const l of activeLinks) {
-      const sId = typeof l.source === "object" ? l.source.id : l.source;
-      const tId = typeof l.target === "object" ? l.target.id : l.target;
-      addEdge(sId, tId);
-      addEdge(tId, sId);
-    }
-    depths.set(selId, 0);
-    let frontier = [selId];
-    for (let d = 1; d <= 2; d++) {
-      const next = [];
-      for (const id of frontier) {
-        for (const nb of adj.get(id) || []) {
-          if (!depths.has(nb)) {
-            depths.set(nb, d);
-            next.push(nb);
-          }
-        }
-      }
-      frontier = next;
-    }
-    return depths;
-  }, [selectedNode?.id, activeLinks]);
-
-  // Dynamic focal atom: with a selection, orbits are relative to it;
-  // otherwise studios sit at the nucleus, performers shell1, scenes shell2.
-  const orbitRadiusFor = useCallback(
-    (node) => {
-      if (selectedNode?.id) {
-        const d = depthMap.get(node.id);
-        if (d === 0) return ORBIT_RADII.nucleus;
-        if (d === 1) return ORBIT_RADII.shell1;
-        return ORBIT_RADII.shell2;
-      }
-      return getOrbitRadius(node);
-    },
-    [selectedNode?.id, depthMap]
-  );
-
-  // Initialize or Reheat D3 Force Simulation
   useEffect(() => {
-    if (activeNodes.length === 0) return;
-    if (simRef.current) simRef.current.stop();
+    hoverRef.current = hovered;
+  }, [hovered]);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
-    const sim = forceSimulation(activeNodes)
-      // 1. Radial force keeps nodes on their atomic orbits
-      .force("shell", forceRadialShell(orbitRadiusFor))
-      // 2. Link force maintains connections, but weaker so it won't crush shells
-      .force(
-        "link",
-        forceLink(activeLinks)
-          .id((d) => d.id)
-          .distance(60)
-          .strength(0.15)
-      )
-      // 3. Collision force prevents overlapping electrons on the same shell
-      .force("collide", forceCollide().radius((d) => d.radius + 12).iterations(2))
-      // 4. Low charge prevents orbits from expanding outward
-      .force("charge", forceManyBody().strength(-40))
-      .alphaDecay(0.018);
+  // -- search ---------------------------------------------------------------
+  const query = searchQuery.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!query) return [];
+    return tilesRef.current
+      .filter((t) => (t.name || "").toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [query, tiles]);
 
-    simRef.current = sim;
-    return () => sim.stop();
-  }, [activeNodes, activeLinks, orbitRadiusFor]);
+  useEffect(() => {
+    matchRef.current =
+      query.length === 0
+        ? new Set()
+        : new Set(
+            tilesRef.current
+              .filter((t) => (t.name || "").toLowerCase().includes(query))
+              .map((t) => t.id)
+          );
+  }, [query, tiles]);
 
-  // Canvas Drawing Loop
-  const draw = useCallback(() => {
+  // -- camera ---------------------------------------------------------------
+  const fitView = useCallback(() => {
+    const list = tilesRef.current;
+    if (list.length === 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    const dpr = window.devicePixelRatio || 1;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (const t of list) {
+      if (t.x < minX) minX = t.x;
+      if (t.x > maxX) maxX = t.x;
+      if (t.y < minY) minY = t.y;
+      if (t.y > maxY) maxY = t.y;
+    }
+    const gw = maxX - minX + 120;
+    const gh = maxY - minY + 120;
+    const k = Math.min(1.6, Math.max(0.12, Math.min(width / gw, height / gh)));
+    transformRef.current = {
+      x: width / 2 - ((minX + maxX) / 2) * k,
+      y: height / 2 - ((minY + maxY) / 2) * k,
+      k,
+    };
+  }, []);
 
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+  useEffect(() => {
+    if (!didFitRef.current && tiles.length > 0) {
+      didFitRef.current = true;
+      // Wait a tick so the canvas has real dimensions.
+      requestAnimationFrame(fitView);
+    }
+  }, [tiles, fitView]);
+
+  const zoomToTile = useCallback((tile, targetK = 3) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !tile) return;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    transformRef.current = {
+      x: width / 2 - tile.x * targetK,
+      y: height / 2 - tile.y * targetK,
+      k: targetK,
+    };
+    setSelected(tile);
+  }, []);
+
+  const goRandom = useCallback(() => {
+    const list = tilesRef.current;
+    if (list.length === 0) return;
+    const tile = list[Math.floor(Math.random() * list.length)];
+    zoomToTile(tile, 2.6);
+  }, [zoomToTile]);
+
+  const submitSearch = useCallback(() => {
+    if (matches.length > 0) zoomToTile(matches[0], 2.6);
+  }, [matches, zoomToTile]);
+
+  // -- canvas render loop ----------------------------------------------------
+const draw = useCallback(() => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+
+  const dpr = window.devicePixelRatio || 1;
+
+  if (
+    canvas.width !== Math.round(width * dpr) ||
+    canvas.height !== Math.round(height * dpr)
+  ) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+
+  ctx.save();
+  ctx.scale(dpr, dpr);
+
+  const { x, y, k } = transformRef.current;
+
+  // -------------------------------------------------------------------------
+  // Background
+  // -------------------------------------------------------------------------
+
+  const background = ctx.createRadialGradient(
+    width * 0.5,
+    height * 0.42,
+    0,
+    width * 0.5,
+    height * 0.42,
+    Math.max(width, height) * 0.75
+  );
+
+  background.addColorStop(0, "#0b0b0d");
+  background.addColorStop(0.5, "#050506");
+  background.addColorStop(1, "#000000");
+
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, width, height);
+
+  // -------------------------------------------------------------------------
+  // World bounds
+  // -------------------------------------------------------------------------
+
+  const m = TILE * 4;
+
+  const wx0 = (-x) / k - m;
+  const wy0 = (-y) / k - m;
+  const wx1 = (width - x) / k + m;
+  const wy1 = (height - y) / k + m;
+
+  // -------------------------------------------------------------------------
+  // Subtle infinite grid
+  // -------------------------------------------------------------------------
+
+  const gridSize = 80;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(k, k);
+
+  const startX = Math.floor(wx0 / gridSize) * gridSize;
+  const startY = Math.floor(wy0 / gridSize) * gridSize;
+
+  ctx.lineWidth = 1 / k;
+  ctx.strokeStyle = "rgba(255,255,255,0.025)";
+
+  for (let gx = startX; gx <= wx1; gx += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(gx, wy0);
+    ctx.lineTo(gx, wy1);
+    ctx.stroke();
+  }
+
+  for (let gy = startY; gy <= wy1; gy += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(wx0, gy);
+    ctx.lineTo(wx1, gy);
+    ctx.stroke();
+  }
+
+  // -------------------------------------------------------------------------
+  // Major grid markers
+  // -------------------------------------------------------------------------
+
+  ctx.strokeStyle = "rgba(255,255,255,0.045)";
+
+  const majorGrid = gridSize * 5;
+
+  const majorX = Math.floor(wx0 / majorGrid) * majorGrid;
+  const majorY = Math.floor(wy0 / majorGrid) * majorGrid;
+
+  for (let gx = majorX; gx <= wx1; gx += majorGrid) {
+    ctx.beginPath();
+    ctx.moveTo(gx, wy0);
+    ctx.lineTo(gx, wy1);
+    ctx.stroke();
+  }
+
+  for (let gy = majorY; gy <= wy1; gy += majorGrid) {
+    ctx.beginPath();
+    ctx.moveTo(wx0, gy);
+    ctx.lineTo(wx1, gy);
+    ctx.stroke();
+  }
+
+  // -------------------------------------------------------------------------
+  // Studio islands
+  // -------------------------------------------------------------------------
+
+  const studioGroups = new Map();
+
+  for (const tile of tilesRef.current) {
+    const key =
+      tile.studio_id ||
+      tile.studio ||
+      "__unknown__";
+
+    if (!studioGroups.has(key)) {
+      studioGroups.set(key, []);
     }
 
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
+    studioGroups.get(key).push(tile);
+  }
 
-    // Apply Pan & Zoom Transform
-    const { x, y, k } = transformRef.current;
-    ctx.translate(x, y);
-    ctx.scale(k, k);
+  const showIslandGlow = k < 1.1;
 
-    const hasFocus = neighborSet.size > 0;
-    const activeFocusId = selectedNode?.id || hoveredNode?.id;
+  if (showIslandGlow) {
+    for (const members of studioGroups.values()) {
+      if (!members.length) continue;
 
-    // Orbit tracks, drawn before links. Labels adapt to focal mode:
-    // with a selection the shells are 1st/2nd-degree neighbors.
-    const ringDefs = selectedNode
-      ? [
-          { radius: ORBIT_RADII.shell1, label: "1ST DEGREE" },
-          { radius: ORBIT_RADII.shell2, label: "2ND DEGREE" },
-        ]
-      : [
-          { radius: ORBIT_RADII.shell1, label: "PERFORMERS" },
-          { radius: ORBIT_RADII.shell2, label: "SCENES" },
-        ];
+      let cx = 0;
+      let cy = 0;
 
-    ringDefs.forEach(({ radius, label }) => {
+      for (const tile of members) {
+        cx += tile.x;
+        cy += tile.y;
+      }
+
+      cx /= members.length;
+      cy /= members.length;
+
+      let radius = 30;
+
+      for (const tile of members) {
+        radius = Math.max(
+          radius,
+          Math.hypot(tile.x - cx, tile.y - cy) + 28
+        );
+      }
+
+      const gradient = ctx.createRadialGradient(
+        cx,
+        cy,
+        0,
+        cx,
+        cy,
+        radius
+      );
+
+      gradient.addColorStop(
+        0,
+        "rgba(245,179,1,0.055)"
+      );
+
+      gradient.addColorStop(
+        0.55,
+        "rgba(245,179,1,0.025)"
+      );
+
+      gradient.addColorStop(
+        1,
+        "rgba(245,179,1,0)"
+      );
+
+      ctx.fillStyle = gradient;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Island boundary
+
+      ctx.strokeStyle = "rgba(255,255,255,0.025)";
+      ctx.lineWidth = 1 / k;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.82, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Tile rendering
+  // -------------------------------------------------------------------------
+
+  const screenTile = TILE * k;
+
+  const showImages = screenTile >= 16;
+  // const showLabels = screenTile >= 32;
+
+  const searching = matchRef.current.size > 0;
+
+  const hoveredTile = hoverRef.current;
+  const selectedTile = selectedRef.current;
+
+  for (const tile of tilesRef.current) {
+    if (
+      tile.x < wx0 ||
+      tile.x > wx1 ||
+      tile.y < wy0 ||
+      tile.y > wy1
+    ) {
+      continue;
+    }
+
+    const isHover =
+      hoveredTile &&
+      hoveredTile.id === tile.id;
+
+    const isSelected =
+      selectedTile &&
+      selectedTile.id === tile.id;
+
+    const isMatch =
+      searching &&
+      matchRef.current.has(tile.id);
+
+    const dimmed =
+      searching &&
+      !isMatch;
+
+    const alpha = dimmed
+      ? 0.08
+      : isSelected
+      ? 1
+      : isHover
+      ? 1
+      : 0.92;
+
+    ctx.globalAlpha = alpha;
+
+    const half = TILE / 2;
+
+    const px = tile.x - half;
+    const py = tile.y - half;
+
+    // -----------------------------------------------------------------------
+    // Tiny particle mode
+    // -----------------------------------------------------------------------
+
+    if (screenTile < 7 && !isHover && !isSelected) {
+      const particleSize = Math.max(
+        1.4,
+        TILE * 0.34
+      );
+
+      ctx.fillStyle = `hsl(${tile.hue} 65% 58%)`;
+
+      ctx.beginPath();
+      ctx.arc(
+        tile.x,
+        tile.y,
+        particleSize / 2,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+
+      continue;
+    }
+
+    // -----------------------------------------------------------------------
+    // Tile shadow / glow
+    // -----------------------------------------------------------------------
+
+    if (isHover || isSelected || isMatch) {
       ctx.save();
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-      ctx.lineWidth = 1.5 / k;
-      ctx.setLineDash([6 / k, 8 / k]); // Dashed orbital track
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = `${10 / k}px monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillStyle = "rgba(148, 163, 184, 0.5)";
-      ctx.fillText(label, 0, -radius - 6 / k);
+
+      ctx.shadowColor =
+        isSelected || isHover
+          ? "rgba(255,255,255,0.35)"
+          : "rgba(245,179,1,0.35)";
+
+      ctx.shadowBlur =
+        isSelected || isHover
+          ? 18 / k
+          : 10 / k;
+
+      ctx.fillStyle =
+        isSelected || isHover
+          ? "rgba(255,255,255,0.08)"
+          : "rgba(245,179,1,0.06)";
+
+      ctx.fillRect(
+        px - 1 / k,
+        py - 1 / k,
+        TILE + 2 / k,
+        TILE + 2 / k
+      );
+
       ctx.restore();
-    });
+    }
 
-    // 1. Draw Links
-    for (const link of activeLinks) {
-      const source = link.source;
-      const target = link.target;
-      // Note: == null (not !x) so nucleus nodes at x/y = 0 still draw links.
-      if (source.x == null || target.x == null) continue;
+    // -----------------------------------------------------------------------
+    // Thumbnail
+    // -----------------------------------------------------------------------
 
-      const isConnected =
-        activeFocusId &&
-        (source.id === activeFocusId || target.id === activeFocusId);
+    const img =
+      showImages ||
+      isHover ||
+      isSelected
+        ? getCachedImage(tile.thumb)
+        : null;
+
+    if (
+      img &&
+      img.complete &&
+      img.naturalWidth > 0
+    ) {
+      ctx.save();
+
+      // Rounded thumbnail
+
+      const radius = Math.min(
+        2.5,
+        TILE * 0.18
+      );
 
       ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.lineTo(target.x, target.y);
+      ctx.roundRect(
+        px,
+        py,
+        TILE,
+        TILE,
+        radius
+      );
 
-      if (isConnected) {
-        ctx.strokeStyle = "#FFC52F";
-        ctx.lineWidth = Math.min(6, 1.5 + (link.weight || 1) * 0.8) / k;
-        ctx.globalAlpha = 0.9;
-      } else {
-        ctx.strokeStyle = link.type === "co_star" ? "#E5A919" : link.type === "performer_studio" ? "#818CF8" : "#334155";
-        ctx.lineWidth = (link.weight ? Math.min(3.5, 0.8 + link.weight * 0.4) : 0.8) / k;
-        ctx.globalAlpha = hasFocus ? 0.08 : link.type === "studio_scene" ? 0.25 : 0.35;
-      }
+      ctx.clip();
+
+      ctx.drawImage(
+        img,
+        px,
+        py,
+        TILE,
+        TILE
+      );
+
+      ctx.restore();
+    } else {
+      // Fallback colored tile
+
+      const gradient = ctx.createLinearGradient(
+        px,
+        py,
+        px + TILE,
+        py + TILE
+      );
+
+      gradient.addColorStop(
+        0,
+        `hsl(${tile.hue} 65% 58%)`
+      );
+
+      gradient.addColorStop(
+        1,
+        `hsl(${tile.hue} 55% 34%)`
+      );
+
+      ctx.fillStyle = gradient;
+
+      ctx.beginPath();
+
+      ctx.roundRect(
+        px,
+        py,
+        TILE,
+        TILE,
+        Math.min(2.5, TILE * 0.18)
+      );
+
+      ctx.fill();
+    }
+
+    // -----------------------------------------------------------------------
+    // Match / hover / selection border
+    // -----------------------------------------------------------------------
+
+    if (
+      isMatch ||
+      isHover ||
+      isSelected
+    ) {
+      ctx.strokeStyle =
+        isSelected
+          ? "#ffffff"
+          : isHover
+          ? "rgba(255,255,255,0.9)"
+          : "#f5b301";
+
+      ctx.lineWidth =
+        (isSelected ? 2 : 1.2) / k;
+
+      ctx.beginPath();
+
+      ctx.roundRect(
+        px,
+        py,
+        TILE,
+        TILE,
+        Math.min(2.5, TILE * 0.18)
+      );
 
       ctx.stroke();
     }
 
-    // 2. Draw Nodes
-    for (const node of activeNodes) {
-      if (node.x == null || node.y == null) continue;
+    // -----------------------------------------------------------------------
+    // Hover / selected enlarged tile
+    // -----------------------------------------------------------------------
 
-      const isSelected = selectedNode?.id === node.id;
-      const isHovered = hoveredNode?.id === node.id;
-      const isNeighbor = neighborSet.has(node.id);
-      const isDimmed = hasFocus && !isNeighbor;
+    if (isHover || isSelected) {
+      const zoom =
+        TILE *
+        (isSelected ? 2.8 : 2.35);
 
-      ctx.globalAlpha = isDimmed ? 0.15 : 1.0;
+      const zx =
+        tile.x - zoom / 2;
 
-      // Studio Node: Hexagonal Glowing Hub
-      if (node.type === "studio") {
-        const r = node.radius;
+      const zy =
+        tile.y - zoom / 2;
 
-        // Glow ring
-        if (isSelected || isHovered) {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, r + 7, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(99, 102, 241, 0.35)";
-          ctx.fill();
-        }
+      ctx.save();
 
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? "#818CF8" : "#4F46E5";
-        ctx.fill();
-        ctx.strokeStyle = isSelected || isHovered ? "#A5B4FC" : "rgba(255,255,255,0.3)";
-        ctx.lineWidth = 2.5 / k;
-        ctx.stroke();
+      ctx.shadowColor =
+        isSelected
+          ? "rgba(245,179,1,0.42)"
+          : "rgba(255,255,255,0.35)";
 
-        // Studio Icon / Initial
-        ctx.fillStyle = "#FFFFFF";
-        ctx.font = `bold ${Math.max(10, Math.min(18, r * 0.8))}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(node.name[0]?.toUpperCase() || "S", node.x, node.y);
+      ctx.shadowBlur =
+        (isSelected ? 26 : 18) / k;
 
-        // Label below
-        if (k > 0.4 || isHovered || isSelected) {
-          ctx.font = `bold ${Math.max(10, 12 / k)}px sans-serif`;
-          ctx.fillStyle = isSelected || isHovered ? "#FFC52F" : "#E2E8F0";
-          ctx.fillText(node.name, node.x, node.y + r + 13 / k);
+      ctx.fillStyle = "#111";
 
-          ctx.font = `${Math.max(9, 10 / k)}px monospace`;
-          ctx.fillStyle = "#94A3B8";
-          ctx.fillText(`${node.scene_count || 0} scenes`, node.x, node.y + r + 24 / k);
-        }
+      ctx.beginPath();
+
+      ctx.roundRect(
+        zx,
+        zy,
+        zoom,
+        zoom,
+        4
+      );
+
+      ctx.fill();
+
+      ctx.clip();
+
+      const big =
+        getCachedImage(tile.thumb);
+
+      if (
+        big &&
+        big.complete &&
+        big.naturalWidth > 0
+      ) {
+        ctx.drawImage(
+          big,
+          zx,
+          zy,
+          zoom,
+          zoom
+        );
+      } else {
+        ctx.fillStyle =
+          `hsl(${tile.hue} 65% 50%)`;
+
+        ctx.fillRect(
+          zx,
+          zy,
+          zoom,
+          zoom
+        );
       }
 
-      // Performer Node: Circular Portrait
-      else if (node.type === "performer") {
-        const r = node.radius;
+      ctx.restore();
 
-        // Selection / Hover Glow
-        if (isSelected || isHovered) {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, r + 6, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(229, 169, 25, 0.4)";
-          ctx.fill();
-        }
+      ctx.strokeStyle =
+        isSelected
+          ? "#f5b301"
+          : "#ffffff";
 
-        // Clip circular portrait
-        const imgUrl = node.image_url ? performerImage(node.image_url) : null;
-        const img = imgUrl ? getCachedImage(imgUrl) : null;
+      ctx.lineWidth =
+        (isSelected ? 2 : 1.5) / k;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-        ctx.clip();
+      ctx.beginPath();
 
-        if (img && img.complete && img.naturalWidth > 0) {
-          ctx.drawImage(img, node.x - r, node.y - r, r * 2, r * 2);
-        } else {
-          // Fallback Gradient Avatar
-          const grad = ctx.createLinearGradient(node.x - r, node.y - r, node.x + r, node.y + r);
-          grad.addColorStop(0, "#27272A");
-          grad.addColorStop(1, "#3F3F46");
-          ctx.fillStyle = grad;
-          ctx.fillRect(node.x - r, node.y - r, r * 2, r * 2);
+      ctx.roundRect(
+        zx,
+        zy,
+        zoom,
+        zoom,
+        4
+      );
 
-          ctx.fillStyle = "#F4F4F5";
-          ctx.font = `bold ${Math.max(9, Math.min(16, r * 0.9))}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(node.name[0]?.toUpperCase() || "?", node.x, node.y);
-        }
-        ctx.restore();
-
-        // Border
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-        ctx.strokeStyle = isSelected || isHovered ? "#FFC52F" : "rgba(255, 255, 255, 0.35)";
-        ctx.lineWidth = (isSelected || isHovered ? 3 : 1.5) / k;
-        ctx.stroke();
-
-        // Label
-        if (k > 0.55 || isHovered || isSelected) {
-          ctx.font = `600 ${Math.max(9, 11 / k)}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = isSelected || isHovered ? "#FFC52F" : "#FFFFFF";
-          ctx.fillText(node.name, node.x, node.y + r + 4 / k);
-        }
-      }
-
-      // Scene Node (Full Mode)
-      else if (node.type === "scene") {
-        const r = isSelected || isHovered ? 8 : node.radius;
-
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected || isHovered ? "#EF4444" : "#94A3B8";
-        ctx.fill();
-        ctx.strokeStyle = isSelected || isHovered ? "#FFFFFF" : "rgba(0,0,0,0.4)";
-        ctx.lineWidth = 1.5 / k;
-        ctx.stroke();
-
-        if (k > 1.3 || isHovered || isSelected) {
-          ctx.font = `${Math.max(8, 10 / k)}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = isSelected || isHovered ? "#FFFFFF" : "#CBD5E1";
-          ctx.fillText(node.name, node.x, node.y + r + 3 / k);
-        }
-      }
-
-      // Cache last-known position so rebuilds don't scatter the atom.
-      posRef.current.set(node.id, { x: node.x, y: node.y });
+      ctx.stroke();
     }
 
-    ctx.restore();
-  }, [activeNodes, activeLinks, neighborSet, selectedNode?.id, hoveredNode?.id]);
+    // -----------------------------------------------------------------------
+    // Studio / scene label
+    // -----------------------------------------------------------------------
 
-  // Animation Loop
+    // if (
+    //   showLabels &&
+    //   !searching &&
+    //   !isHover &&
+    //   !isSelected
+    // ) {
+    //   const label =
+    //     tile.name ||
+    //     tile.studio ||
+    //     "";
+
+    //   if (label) {
+    //     ctx.font =
+    //       `${Math.max(8, 9 / k)}px ui-monospace, monospace`;
+
+    //     ctx.fillStyle =
+    //       "rgba(255,255,255,0.45)";
+
+    //     ctx.textAlign = "center";
+
+    //     ctx.fillText(
+    //       label.length > 24
+    //         ? `${label.slice(0, 24)}…`
+    //         : label,
+    //       tile.x,
+    //       tile.y + TILE * 0.9
+    //     );
+    //   }
+    // }
+  }
+
+  ctx.restore();
+
+  // -------------------------------------------------------------------------
+  // Screen-space vignette
+  // -------------------------------------------------------------------------
+
+  const vignette = ctx.createRadialGradient(
+    width / 2,
+    height / 2,
+    Math.min(width, height) * 0.28,
+    width / 2,
+    height / 2,
+    Math.max(width, height) * 0.75
+  );
+
+  vignette.addColorStop(
+    0,
+    "rgba(0,0,0,0)"
+  );
+
+  vignette.addColorStop(
+    0.72,
+    "rgba(0,0,0,0.08)"
+  );
+
+  vignette.addColorStop(
+    1,
+    "rgba(0,0,0,0.62)"
+  );
+
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}, []);
+
   useEffect(() => {
     let running = true;
     const loop = () => {
       if (!running) return;
       draw();
-      animFrameRef.current = requestAnimationFrame(loop);
+      requestAnimationFrame(loop);
     };
-    animFrameRef.current = requestAnimationFrame(loop);
+    const id = requestAnimationFrame(loop);
     return () => {
       running = false;
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      cancelAnimationFrame(id);
     };
   }, [draw]);
 
-  // Find node at mouse coords
-  const getNodeAt = (screenX, screenY) => {
+  // -- picking ---------------------------------------------------------------
+  const tileAt = (screenX, screenY) => {
     const { x, y, k } = transformRef.current;
-    const worldX = (screenX - x) / k;
-    const worldY = (screenY - y) / k;
-
-    // Search in reverse order (top nodes first)
-    for (let i = activeNodes.length - 1; i >= 0; i--) {
-      const n = activeNodes[i];
-      if (n.x == null || n.y == null) continue;
-      const dist = Math.hypot(n.x - worldX, n.y - worldY);
-      if (dist <= n.radius + 4 / k) {
-        return n;
-      }
+    const wx = (screenX - x) / k;
+    const wy = (screenY - y) / k;
+    const list = tilesRef.current;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i];
+      const r = TILE / 2 + 5 / k;
+      if (Math.abs(t.x - wx) <= r && Math.abs(t.y - wy) <= r) return t;
     }
     return null;
   };
 
-  // Center view on a specific node
-  const zoomToNode = useCallback((node) => {
-    if (!node || node.x == null || node.y == null) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const targetK = node.type === "scene" ? 1.8 : 1.3;
-
-    transformRef.current = {
-      x: width / 2 - node.x * targetK,
-      y: height / 2 - node.y * targetK,
-      k: targetK,
-    };
-    setSelectedNode(node);
-  }, []);
-
-  // Fit all nodes nicely in view
-  const fitView = useCallback(() => {
-    if (activeNodes.length === 0) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    for (const n of activeNodes) {
-      if (n.x == null || n.y == null) continue;
-      if (n.x < minX) minX = n.x;
-      if (n.x > maxX) maxX = n.x;
-      if (n.y < minY) minY = n.y;
-      if (n.y > maxY) maxY = n.y;
-    }
-
-    if (minX === Infinity) return;
-
-    const graphWidth = maxX - minX + 100;
-    const graphHeight = maxY - minY + 100;
-    const k = Math.min(1.4, Math.max(0.15, Math.min(width / graphWidth, height / graphHeight) * 0.9));
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-
-    transformRef.current = {
-      x: width / 2 - centerX * k,
-      y: height / 2 - centerY * k,
-      k,
-    };
-  }, [activeNodes]);
-
-  // Center the atom on screen once data first arrives (origin starts at 0,0).
-  useEffect(() => {
-    if (!didFitRef.current && activeNodes.length > 0) {
-      didFitRef.current = true;
-      fitView();
-    }
-  }, [activeNodes, fitView]);
-
-  // Mouse Handlers
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
+    movedRef.current = false;
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const node = getNodeAt(mouseX, mouseY);
-    if (node) {
-      draggedNodeRef.current = node;
-      node.fx = node.x;
-      node.fy = node.y;
-      if (simRef.current && !isPaused) {
-        simRef.current.alphaTarget(0.3).restart();
-      }
+    const t = tileAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (t) {
+      // Let click select; don't start a pan.
+      dragStartRef.current = { x: e.clientX, y: e.clientY, tile: t };
     } else {
       isDraggingRef.current = true;
       dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -622,128 +905,80 @@ export default function GraphMap() {
 
   const handleMouseMove = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    if (draggedNodeRef.current) {
-      const { x, y, k } = transformRef.current;
-      draggedNodeRef.current.fx = (mouseX - x) / k;
-      draggedNodeRef.current.fy = (mouseY - y) / k;
-      return;
-    }
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
     if (isDraggingRef.current) {
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
+      if (Math.abs(dx) + Math.abs(dy) > 2) movedRef.current = true;
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       transformRef.current.x += dx;
       transformRef.current.y += dy;
       return;
     }
-
-    // Hover detection
-    const hovered = getNodeAt(mouseX, mouseY);
-    setHoveredNode(hovered);
-    if (canvasRef.current) {
-      canvasRef.current.style.cursor = hovered ? "pointer" : isDraggingRef.current ? "grabbing" : "default";
+    if (dragStartRef.current.tile) {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) {
+        // Turned into a drag: start panning with the grabbed tile.
+        isDraggingRef.current = true;
+        movedRef.current = true;
+      }
+      return;
     }
+    const hov = tileAt(mx, my);
+    setHovered((prev) => (prev?.id === hov?.id ? prev : hov));
+    if (canvasRef.current) canvasRef.current.style.cursor = hov ? "pointer" : "grab";
   };
 
-  const handleMouseUp = () => {
-    if (draggedNodeRef.current) {
-      if (!isPaused) {
-        draggedNodeRef.current.fx = null;
-        draggedNodeRef.current.fy = null;
-        if (simRef.current) simRef.current.alphaTarget(0);
-      }
-      draggedNodeRef.current = null;
-    }
+  const endDrag = () => {
     isDraggingRef.current = false;
+    dragStartRef.current = {};
   };
 
   const handleClick = (e) => {
+    if (movedRef.current) {
+      movedRef.current = false;
+      return;
+    }
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const node = getNodeAt(mouseX, mouseY);
-    setSelectedNode(node);
+    const t = tileAt(e.clientX - rect.left, e.clientY - rect.top);
+    setSelected(t);
   };
 
   const handleWheel = (e) => {
     e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.15 : 0.87;
     const { x, y, k } = transformRef.current;
-    const newK = Math.max(0.1, Math.min(4.5, k * zoomFactor));
+    const nk = Math.max(0.12, Math.min(6, k * factor));
+    const wx = (mx - x) / k;
+    const wy = (my - y) / k;
+    transformRef.current = { x: mx - wx * nk, y: my - wy * nk, k: nk };
+  };
 
-    // Zoom centered on mouse
-    const worldX = (mouseX - x) / k;
-    const worldY = (mouseY - y) / k;
-    transformRef.current = {
-      x: mouseX - worldX * newK,
-      y: mouseY - worldY * newK,
-      k: newK,
+  // Esc clears selection / search.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setSelected(null);
+        setSearchQuery("");
+      }
     };
-  };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-  // Toggle Physics Pause / Resume
-  const togglePause = () => {
-    if (!simRef.current) return;
-    if (isPaused) {
-      simRef.current.alpha(0.3).restart();
-      setIsPaused(false);
-    } else {
-      simRef.current.stop();
-      setIsPaused(true);
-    }
-  };
-
-  // Search Results for Jump
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim() || !graphData) return [];
-    const q = searchQuery.toLowerCase().trim();
-    return (graphData.nodes || [])
-      .filter((n) => (n.name || "").toLowerCase().includes(q))
-      .slice(0, 10);
-  }, [searchQuery, graphData]);
-
-  const onSelectSearchResult = (r) => {
-    const found = nodeMap.get(r.id);
-    if (found) zoomToNode(found);
-    setSearchOpen(false);
-  };
+  const preview = hovered || selected;
 
   return (
-    <div className="h-full w-full bg-background flex flex-col relative overflow-hidden select-none">
-      {/* Top Floating Control Toolbar */}
-      <GraphToolbar
-        mode={mode}
-        setMode={setMode}
-        showStudios={showStudios}
-        setShowStudios={setShowStudios}
-        showPerformers={showPerformers}
-        setShowPerformers={setShowPerformers}
-        showScenes={showScenes}
-        setShowScenes={setShowScenes}
-        minScenes={minScenes}
-        setMinScenes={setMinScenes}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        searchOpen={searchOpen}
-        setSearchOpen={setSearchOpen}
-        searchResults={searchResults}
-        onSelectSearchResult={onSelectSearchResult}
-        fitView={fitView}
-        togglePause={togglePause}
-        isPaused={isPaused}
-      />
-
-      {/* Main Canvas Viewport */}
+    <div className="graph-map h-full w-full flex flex-col relative overflow-hidden select-none">
+      {/* Main infinite canvas */}
       {loading ? (
-        <div className="h-full flex items-center justify-center">
+        <div className="h-full flex items-center justify-center bg-black">
           <Spinner />
         </div>
       ) : (
@@ -751,28 +986,74 @@ export default function GraphMap() {
           ref={canvasRef}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          onMouseUp={endDrag}
+          onMouseLeave={() => {
+            endDrag();
+            setHovered(null);
+          }}
           onClick={handleClick}
           onWheel={handleWheel}
-          className="w-full h-full block bg-background cursor-grab active:cursor-grabbing"
+          className="w-full h-full block cursor-grab active:cursor-grabbing"
         />
       )}
 
-      {/* Bottom Metrics Bar */}
-      <div className="uv-scope uv-stats">
-        <span className="uv-stat uv-hot">
-          <b>{activeNodes.length}</b> nodes
-        </span>
-        <span className="uv-stat uv-hot">
-          <b>{activeLinks.length}</b> links
-        </span>
-        <span className="uv-stat">Scroll to zoom · Drag to pan</span>
-      </div>
+      {/* Top-right info card, ytmap-style */}
+      {!loading && (
+        <div className="ytmap-info">
+          <button className="ytmap-info-close" onClick={() => setSelected(null)} aria-label="Clear selection">
+            ✕
+          </button>
+          <div className="ytmap-info-media">
+            {preview ? (
+              <img
+                key={preview.id}
+                src={preview.thumb}
+                alt=""
+                draggable={false}
+                onError={(e) => (e.target.style.display = "none")}
+              />
+            ) : (
+              <div className="ytmap-info-count">
+                <b>{totalScenes}</b>
+                <span>SCENES<br />IN 1 SCREEN</span>
+              </div>
+            )}
+          </div>
+          <div className="ytmap-info-text">
+            {preview ? (
+              <>
+                <h3>{preview.name}</h3>
+                <p>
+                  {[preview.studio, preview.resolution].filter(Boolean).join(" · ") ||
+                    "Click to open scene"}
+                </p>
+              </>
+            ) : (
+              <>
+                <h3>Every scene on one screen</h3>
+                <p>Hover any tile to preview · scroll to zoom · drag to pan</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
-      {/* Slide-out Inspector Drawer */}
+      {/* Bottom floating pill: home / search / random */}
+      <YtMapBar
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        matches={matches}
+        totalMatches={query ? matchRef.current.size : 0}
+        onSubmitSearch={submitSearch}
+        onPickMatch={zoomToTile}
+        onHome={fitView}
+        onRandom={goRandom}
+      />
+
+      {/* Scene inspector drawer */}
       <GraphInspector
-        selectedNode={selectedNode}
-        onClose={() => setSelectedNode(null)}
+        selectedNode={selected}
+        onClose={() => setSelected(null)}
         navigate={navigate}
       />
     </div>

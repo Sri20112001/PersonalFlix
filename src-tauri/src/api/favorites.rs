@@ -15,8 +15,39 @@ pub fn routes() -> Router<AppState> {
         .route("/{type}/{targetId}", delete(remove))
 }
 
-fn fav_from_row(row: &rusqlite::Row) -> rusqlite::Result<Value> {
-    Ok(json!({
+/// Scene ids currently favorited (`favorites` stores scene ids as TEXT
+/// target_ids). Shared by the `fav` filter in scenes/search so both stay
+/// in sync.
+pub fn favorite_scene_ids(conn: &rusqlite::Connection) -> Vec<i64> {
+    conn.prepare("SELECT target_id FROM favorites WHERE type = 'scene'")
+        .map(|mut s| {
+            s.query_map([], |r| r.get::<_, String>(0))
+                .map(|rows| {
+                    rows
+                        .flatten()
+                        .filter_map(|t| t.parse::<i64>().ok())
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_default()
+}
+
+/// Truthy `fav`/`favorite` param values: `?fav=1`, `?fav=yes`, `fav:yes`.
+pub fn fav_requested(query: &HashMap<String, String>) -> bool {
+    query
+        .get("fav")
+        .or_else(|| query.get("favorite"))
+        .map(|v| {
+            matches!(
+                v.to_lowercase().as_str(),
+                "1" | "true" | "yes" | "only" | "fav" | "favorites"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn fav_from_row(row: &rusqlite::Row) -> rusqlite::Result<Value> {    Ok(json!({
         "_id": row.get::<_, i64>(0)?,
         "type": row.get::<_, String>(1)?,
         "target_id": row.get::<_, String>(2)?,

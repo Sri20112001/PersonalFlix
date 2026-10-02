@@ -30,6 +30,8 @@ export default function Library() {
   const [q, setQ] = useState("");
   const [filters, setFilters] = useState([]);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  // Favorites-only view (server-side ?fav=1 filter, orthogonal to tabs/sort/search)
+  const [favOnly, setFavOnly] = useState(false);
   const [autoScroll, setAutoScroll] = useState(() => {
     return localStorage.getItem("pfx-library-autoscroll") !== "false";
   });
@@ -230,11 +232,12 @@ export default function Library() {
     return () => window.removeEventListener("focus", onWindowFocus);
   }, []);
 
-  const load = async (t, p, s = sort, append = false) => {
+  const load = async (t, p, s = sort, append = false, fav = favOnly) => {
     setLoading(true);
     try {
       const params = { page: p, limit: PAGE_SIZE, sort: s };
       if (t) params.status = t;
+      if (fav) params.fav = 1;
       const res = await api.scenes(params);
       setScenes((prev) => (append ? [...prev, ...res.scenes] : res.scenes));
       setTotal(res.total);
@@ -250,10 +253,10 @@ export default function Library() {
     }
   };
 
-  const runSearch = async (text, p, append = false) => {
+  const runSearch = async (text, p, append = false, fav = favOnly) => {
     setLoading(true);
     try {
-      const res = await api.search(text, p, PAGE_SIZE);
+      const res = await api.search(text, p, PAGE_SIZE, fav);
       setScenes((prev) =>
         append ? [...prev, ...(res.scenes || [])] : res.scenes || [],
       );
@@ -361,7 +364,7 @@ export default function Library() {
     }
     setFilters([]);
     load(tab, 1, sort, false);
-  }, [tab, q, sort]);
+  }, [tab, q, sort, favOnly]);
 
   const addFilterToken = (field, value) => {
     if (!value) return;
@@ -391,6 +394,7 @@ export default function Library() {
   const clearAllFilters = () => {
     setQ("");
     setTab("");
+    setFavOnly(false);
     handleSortChange("recent");
   };
 
@@ -516,6 +520,8 @@ export default function Library() {
         onRemoveFilter={removeFilter}
         tab={tab}
         onTabChange={setTab}
+        favOnly={favOnly}
+        onToggleFavOnly={() => setFavOnly((v) => !v)}
         filterDrawerOpen={filterDrawerOpen}
         onToggleFilterDrawer={() => setFilterDrawerOpen((o) => !o)}
         sort={sort}
@@ -715,11 +721,13 @@ export default function Library() {
             <p className="text-xs text-textSecondary max-w-sm">
               {isSearch
                 ? `No videos match "${q}". Try clearing filters or using broader search terms.`
-                : tab
-                  ? `No videos marked as "${tab}".`
-                  : "No video files found in your media library."}
+                : favOnly
+                  ? "No favorites yet. Open a scene and hit the heart to pin it here."
+                  : tab
+                    ? `No videos marked as "${tab}".`
+                    : "No video files found in your media library."}
             </p>
-            {(isSearch || tab) && (
+            {(isSearch || tab || favOnly) && (
               <button
                 onClick={clearAllFilters}
                 className="mt-2 bg-accent hover:bg-accent/80 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-widest transition-all cursor-pointer shadow-md"

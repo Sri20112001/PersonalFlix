@@ -11,6 +11,7 @@ const DEFAULT_TABS = [
 
 const DEFAULT_SORT_OPTIONS = [
   { key: "recent", label: "Recently Added" },
+  { key: "fav_first", label: "Favorites First" },
   { key: "title_asc", label: "Title (A → Z)" },
   { key: "title_desc", label: "Title (Z → A)" },
   { key: "date_desc", label: "Release Date (Newest)" },
@@ -33,6 +34,8 @@ export default function LibraryHeader({
   tab = "",
   onTabChange,
   tabs = DEFAULT_TABS,
+  favOnly = false,
+  onToggleFavOnly,
   filterDrawerOpen = false,
   onToggleFilterDrawer,
   sort = "recent",
@@ -84,7 +87,7 @@ export default function LibraryHeader({
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder='Search title, studio:foo, resolution:720, performer:"Jane Doe", status:watched...'
+            placeholder='Search title, studio:foo, fav:yes, resolution:720, performer:"Jane Doe", status:watched...'
             className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-textMuted"
           />
           {isSearch && (
@@ -155,8 +158,33 @@ export default function LibraryHeader({
           ))}
         </div>
 
-        {/* Right Controls: Filter Toggle, Sort Dropdown, View Mode */}
+        {/* Right Controls: Favorites Toggle, Filter Toggle, Sort Dropdown, View Mode */}
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Favorites-Only Toggle */}
+          <button
+            onClick={onToggleFavOnly}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer ${
+              favOnly
+                ? "bg-amber-300 text-zinc-950 shadow-[0_0_16px_rgba(252,211,77,0.45)]"
+                : "bg-surface hover:bg-surfaceHover text-textSecondary hover:text-white border border-white/10"
+            }`}
+            title="Show only favorited scenes"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill={favOnly ? "currentColor" : "none"}
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+            <span>Favorites</span>
+          </button>
+
           {/* Filters Toggle Button */}
           <button
             onClick={onToggleFilterDrawer}
